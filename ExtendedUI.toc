@@ -1,0 +1,40 @@
+## Interface: 120000, 110207, 50503, 38000, 20505, 11508
+## Title: ExtendedUI
+## Notes: Per actionbar slot configurable visual effects driven by triggers.
+## Author: WesleyPostma
+## Version: 0.3.5
+## SavedVariablesPerCharacter: ExtendedUI_DB
+
+Core.lua
+Config.lua
+Triggers.lua
+Effects.lua
+Menu.lua
+TotemRangeUtil.lua
+TotemTracker.lua
+BuffTracker.lua
+OneBag.lua
+LootToast.lua
+
+SoundBank_GnomeMale.lua
+SoundBank_Creatures.lua
+SoundBank_DraeneiFemale.lua
+SoundBank_ScourgeMale.lua
+SoundBank_OrcFemale.lua
+SoundBank_OrcMale.lua
+SoundBank_ScourgeFemale.lua
+SoundBank_NightelfFemale.lua
+SoundBank_NightelfMale.lua
+SoundBank_DwarfFemale.lua
+SoundBank_DwarfMale.lua
+SoundBank_HumanFemale.lua
+SoundBank_HumanMale.lua
+SoundBank_GnomeFemale.lua
+SoundBank_DraeneiMale.lua
+SoundBank_BloodelfMale.lua
+SoundBank_TaurenFemale.lua
+SoundBank_TaurenMale.lua
+SoundBank_TrollFemale.lua
+SoundBank_TrollMale.lua
+SoundBank_BloodelfFemale.lua
+SoundTweaks.lua
