@@ -1,4 +1,4 @@
-## Interface: 120000, 110207, 50503, 38000, 20505, 11508
+## Interface: 20505
 ## Title: ExtendedUI
 ## Notes: Per actionbar slot configurable visual effects driven by triggers.
 ## Author: WesleyPostma
