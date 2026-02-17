@@ -1,8 +1,33 @@
 local EUI = ExtendedUI
 EUI_SoundTweaks = EUI_SoundTweaks or {}
 local ST = EUI_SoundTweaks
+local originalDialogVol = tonumber(GetCVar("Sound_DialogVolume")) or 1.0
+-- --- Volledige inventarisatie van alle TBC Era emotes ---
+ST.AllEmotes = {
+  "/agree", "/amaze", "/angry", "/applaud", "/bashful", "/beckon", "/beg", "/bite",
+  "/bleed", "/blink", "/blush", "/boggle", "/bonk", "/boop", "/bow", "/brb", "/busy", "/bye",
+  "/cackle", "/calm", "/cat", "/challenge", "/charge", "/cheer", "/chicken", "/chuckle",
+  "/clap", "/cold", "/commiserate", "/congratulate", "/confused", "/congrats", "/cower",
+  "/crack", "/cringe", "/criticize", "/cry", "/curious", "/curtsey", "/dance", "/ding",
+  "/dire", "/disagree", "/disappointed", "/doh", "/drool", "/duck", "/excited", "/eye",
+  "/fart", "/fidget", "/flap", "/flee", "/flex", "/flirt", "/fond", "/food", "/frown",
+  "/gasp", "/gaze", "/giggle", "/glare", "/gloat", "/golfclap", "/goodbye", "/greet",
+  "/grin", "/groan", "/grovel", "/guffaw", "/hail", "/happy", "/hello", "/hug", "/hungry",
+  "/idle", "/impatient", "/incoming", "/insult", "/introduce", "/jk", "/kneel", "/laugh",
+  "/looking", "/lost", "/love", "/mad", "/map", "/massage", "/meow", "/moan", "/mourn",
+  "/no", "/nod", "/nosepick", "/panic", "/peck", "/peer", "/pity", "/plead", "/point", "/poke",
+  "/ponder", "/pounce", "/pout", "/pray", "/proud", "/purr", "/raise", "/rasp", "/reprimand",
+  "/roar", "/rofl", "/rude", "/salute", "/scared", "/scratch", "/scuse", "/sexy", "/shake",
+  "/shout", "/shrug", "/shy", "/sigh", "/silly", "/sing", "/smile", "/smirk", "/snarl",
+  "/snicker", "/sniff", "/snub", "/sob", "/speak", "/spit", "/stare", "/sorry", "/surrender",
+  "/surprised", "/suspicious", "/swoon", "/talk", "/tap", "/thank", "/think", "/tickle", "/tired",
+  "/train", "/truce", "/twiddle", "/veto", "/victory", "/violin", "/wait", "/wave", "/welcome",
+  "/whine", "/whistle", "/wicked", "/wink", "/worry", "/yawn", "/yes", "/yodel"
+}
 
+-- Hardcoded fallback emotes voor UI-label alignment (bijv. HELLO, JOKE etc)
 ST.EmoteLabels = {"HELLO", "THANKYOU", "CHEER", "JOKE", "FLIRT", "NO", "YES", "BYE", "OPENFIRE", "FOLLOW", "FLEE", "CHARGE", "HEALING"}
+
 ST.ErrorList = {}
 
 local function GetRaceGenderKey()
@@ -12,25 +37,25 @@ local function GetRaceGenderKey()
   return raceFile .. gender
 end
 
--- === Soundbank dropdown options: name-key pairs, always sorted together (DYNAMIC, SAFE) ===
-local banks = {}
+local function SetDialogVolume(vol)
+  SetCVar("Sound_DialogVolume", tostring(vol))
+end
+
+local banks = {} -- Soundbank dropdown
 for k, v in pairs(EUI_SoundTweaks) do
   local shortname = tostring(k):match("^SoundBank(.+)")
   if shortname and type(v) == "table" then
-    local friendly = v.displayName or shortname:gsub("([a-z])([A-Z])", "%1 %2")
-    banks[#banks + 1] = {name = friendly, key = k}
+    banks[#banks + 1] = {name = v.displayName or shortname:gsub("([a-z])([A-Z])", "%1 %2"), key = k}
   end
 end
 table.sort(banks, function(a, b) return a.name < b.name end)
-ST.SoundBankNames = {}
-ST.SoundBankKeys = {}
+ST.SoundBankNames, ST.SoundBankKeys = {}, {}
 for _, entry in ipairs(banks) do
   ST.SoundBankNames[#ST.SoundBankNames+1] = entry.name
   ST.SoundBankKeys[#ST.SoundBankKeys+1] = entry.key
 end
 ST.selectedSoundBankIndex = 1
 
--- Build ST.SoundBank with all labels (for lookups in some routines)
 ST.SoundBank = {}
 for k, v in pairs(EUI_SoundTweaks) do
   if type(v) == "table" and tostring(k):match("^SoundBank") then
@@ -41,8 +66,7 @@ for k, v in pairs(EUI_SoundTweaks) do
 end
 
 -- Populate error and emote fallback voice files
-ST.ErrorVoiceFiles = {}
-ST.EmoteVoiceFiles = {}
+ST.ErrorVoiceFiles, ST.EmoteVoiceFiles = {}, {}
 for k, v in pairs(EUI_SoundTweaks) do
   if type(v) == "table" and k:match("^ErrorVoiceFiles") then
     local comboKey = k:match("^ErrorVoiceFiles(.+)$")
@@ -69,11 +93,11 @@ local function EnsureDB()
   ExtendedUI_DB.profile.global.emoteTweaks = ExtendedUI_DB.profile.global.emoteTweaks or {}
   ExtendedUI_DB.profile.global.dynamicErrorIds = ExtendedUI_DB.profile.global.dynamicErrorIds or {}
   ExtendedUI_DB.profile.global.dynamicErrorLabels = ExtendedUI_DB.profile.global.dynamicErrorLabels or {}
+  ExtendedUI_DB.profile.global.discoveredErrorLabels = ExtendedUI_DB.profile.global.discoveredErrorLabels or {}
+  ExtendedUI_DB.profile.global.allEmotes = ExtendedUI_DB.profile.global.allEmotes or ST.AllEmotes
 end
 
--- Dynamic error table logic
-ST._dynamicErrors = {}
-ST._dynamicErrorLabels = {}
+ST._dynamicErrors, ST._dynamicErrorLabels = {}, {}
 
 local function LoadDynamicErrors()
   EnsureDB()
@@ -113,6 +137,13 @@ local function SaveDynamicErrorLabel(errId, label)
   ST._dynamicErrorLabels[errId] = label
 end
 
+local function AddDiscoveredErrorLabel(errorText)
+  EnsureDB()
+  if errorText and errorText ~= "" then
+    ExtendedUI_DB.profile.global.discoveredErrorLabels[errorText] = true
+  end
+end
+
 local function buildErrorMenuList()
   local seen, out = {}, {}
   for _, id in ipairs(ST.ErrorList) do
@@ -130,22 +161,95 @@ local function buildErrorMenuList()
   return out
 end
 
+-- === Echt een REBUILD-knop voor Emote Speech! ===
+function ST:RebuildEmotes()
+  EnsureDB()
+  wipe(ExtendedUI_DB.profile.global.allEmotes)
+  for _, emote in ipairs(ST.AllEmotes) do
+    table.insert(ExtendedUI_DB.profile.global.allEmotes, emote)
+  end
+  print("Emote speech DB rebuilt!")
+  if ST.menu and ST.menu.UpdateMenu then
+    ST.menu.UpdateMenu()
+  end
+end
+
+local function PlayCustomEmoteSound(soundId)
+  originalDialogVol = tonumber(GetCVar("Sound_DialogVolume")) or 1.0
+  SetDialogVolume(0)
+  PlaySoundFile(soundId)
+  C_Timer.After(4, function()
+    SetDialogVolume(originalDialogVol)
+  end)
+end
+
+-- === Slash-override: custom sound for yourself, vanilla for others ===
+for _, emoteCmd in ipairs(ST.AllEmotes) do
+  local cmdName = emoteCmd:sub(2):upper()
+  local handlerName = "EUIEMOTE_"..cmdName
+  _G["SLASH_"..handlerName.."1"] = emoteCmd
+  SlashCmdList[handlerName] = function()
+    EnsureDB()
+    local soundId = ExtendedUI_DB.profile.global.emoteTweaks[emoteCmd]
+    if soundId and soundId > 0 then
+      PlayCustomEmoteSound(soundId)
+    end
+    DoEmote(cmdName) -- Vanilla event for others
+  end
+end
+
+-- === Mapping management (slashcommands) ===
+SLASH_EUIEMOTESET1 = "/emoteset"
+SlashCmdList.EUIEMOTESET = function(msg)
+  EnsureDB()
+  local cmd, id = msg:match("^(%S+)%s+(%d+)")
+  if cmd and id then
+    ExtendedUI_DB.profile.global.emoteTweaks[cmd] = tonumber(id)
+    print("Emote sound set for", cmd, "=", id)
+    if ST.menu and ST.menu.UpdateMenu then ST.menu.UpdateMenu() end
+  else
+    print("Usage: /emoteset /emote FileDataID")
+  end
+end
+
+SLASH_EUIEMOTECLEAR1 = "/emoteclear"
+SlashCmdList.EUIEMOTECLEAR = function(cmd)
+  EnsureDB()
+  if ExtendedUI_DB.profile.global.emoteTweaks[cmd] then
+    ExtendedUI_DB.profile.global.emoteTweaks[cmd] = nil
+    print("Cleared custom sound for emote:", cmd)
+    if ST.menu and ST.menu.UpdateMenu then ST.menu.UpdateMenu() end
+  else
+    print("No mapping found for:", cmd)
+  end
+end
+
+SLASH_EUIEMOTELIST1 = "/emotelist"
+SlashCmdList.EUIEMOTELIST = function()
+  EnsureDB()
+  print("Custom emote mappings:")
+  for cmd, id in pairs(ExtendedUI_DB.profile.global.emoteTweaks) do
+    print(cmd, "->", id)
+  end
+end
+
+-- === MENU UI ===
 function ST:EnsureConfigMenu()
   if ST.menu then return end
-  local w = CreateFrame("Frame", "EUISoundTweaksFrame", UIParent, "BackdropTemplate")
+  local w = CreateFrame("Frame", "EUISoundTweaksFrame", UIParent, "BasicFrameTemplateWithInset")
   ST.menu = w
   if EUI_Menu and EUI_Menu.RegisterSubMenuFrame then EUI_Menu.RegisterSubMenuFrame(w) end
-
+  w:SetFrameLevel(4)
   w:SetSize(940, 680)
   w:SetPoint("CENTER")
   w:SetFrameStrata("DIALOG")
-  w:SetBackdrop({
-    bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true, tileSize = 16, edgeSize = 16,
-    insets = { left = 4, right = 4, top = 4, bottom = 4 },
-  })
-  w:SetBackdropColor(0, 0, 0, 0.96)
+  --w:SetBackdrop({
+  --  bgFile = "Interface\\Buttons\\WHITE8x8",
+  --  edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+  --  tile = true, tileSize = 16, edgeSize = 16,
+  --  insets = { left = 4, right = 4, top = 4, bottom = 4 },
+  --})
+  --w:SetBackdropColor(0, 0, 0, 0.96)
   w:EnableMouse(true)
   w:SetMovable(true)
   w:RegisterForDrag("LeftButton")
@@ -153,19 +257,16 @@ function ST:EnsureConfigMenu()
   w:SetScript("OnDragStop", function() w:StopMovingOrSizing() end)
 
   local title = w:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 16, -12)
+  title:SetPoint("TOPLEFT", 16, -5)
   title:SetText("ExtendedUI - Sound Tweaks (Error & Character Speech)")
 
-  local close = CreateFrame("Button", nil, w, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -6, -6)
-  close:SetScript("OnClick", function()
-    w:Hide()
-    if EUI_Menu and EUI_Menu.hub then EUI_Menu.hub:Show() end
-  end)
+  --local close = CreateFrame("Button", nil, w, "UIPanelCloseButton")
+  --close:SetPoint("TOPRIGHT", -6, -6)
+  --close:SetScript("OnClick", function() w:Hide() if EUI_Menu and EUI_Menu.hub then EUI_Menu.hub:Show() end end)
 
   local hint = w:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   hint:SetPoint("TOPLEFT", 28, -44)
-  hint:SetText("Errors and emotes: use custom mappings, or fallback to character/race/gender voices.")
+  hint:SetText("Errors auto-discovered (labels), emotes: full client inventory.")
 
   local divider = w:CreateTexture(nil, "ARTWORK")
   divider:SetTexture("Interface\\Buttons\\WHITE8x8")
@@ -181,11 +282,21 @@ function ST:EnsureConfigMenu()
   soundbankHeader:SetPoint("TOPLEFT", 520, -70)
   soundbankHeader:SetText("Soundbank (Choose race/gender)")
 
+  -- === Emote Speech header + Rebuild button ===
   local emoteHeader = w:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   emoteHeader:SetPoint("TOPLEFT", 24, -366)
   emoteHeader:SetText("Emote Speech")
 
-  -- Soundbank search field
+  local rebuildBtn = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
+  rebuildBtn:SetPoint("LEFT", emoteHeader, "RIGHT", 10, 0)
+  rebuildBtn:SetText("Rebuild Emote DB")
+  rebuildBtn:SetSize(140, 22)
+  rebuildBtn:SetScript("OnClick", function()
+    ST:RebuildEmotes()
+    if w.UpdateMenu then w.UpdateMenu() end
+  end)
+
+  -- Soundbank search
   local searchBox = CreateFrame("EditBox", nil, w, "InputBoxTemplate")
   searchBox:SetSize(190, 20)
   searchBox:SetPoint("TOPLEFT", 520, -100)
@@ -197,7 +308,6 @@ function ST:EnsureConfigMenu()
   dropDown:SetPoint("LEFT", searchBox, "RIGHT", 6, 0)
   UIDropDownMenu_SetWidth(dropDown, 135)
 
-  -- Soundbank UI (NB! w.sbScroll ipv sbScroll, zie fix)
   local sbScroll = CreateFrame("ScrollFrame", nil, w, "UIPanelScrollFrameTemplate")
   sbScroll:SetSize(340, 530)
   sbScroll:SetPoint("TOPLEFT", 520, -120)
@@ -248,6 +358,8 @@ function ST:EnsureConfigMenu()
   w.emoteContent = emoteContent
   w.emoteRows = {}
 
+  local menuEmotes = ExtendedUI_DB.profile.global.allEmotes or ST.AllEmotes
+
   local function EnsureErrRow(i)
     if w.errRows[i] then return w.errRows[i] end
     local row = {}
@@ -258,7 +370,7 @@ function ST:EnsureConfigMenu()
     row.box:SetBackdropColor(1,1,1, (i%2==0) and 0.03 or 0.05)
     local errLabel = row.box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     errLabel:SetPoint("LEFT", 6, 0)
-    errLabel:SetWidth(170)
+    errLabel:SetWidth(220)
     errLabel:SetJustifyH("LEFT")
     row.errLabel = errLabel
 
@@ -353,22 +465,28 @@ function ST:EnsureConfigMenu()
     local mapping = ExtendedUI_DB.profile.global.soundTweaks
     local emoteMap = ExtendedUI_DB.profile.global.emoteTweaks
     if w.sbScroll then w.sbScroll:SetVerticalScroll(0) end
-    local errorIds = buildErrorMenuList()
+
+    -- === Error mapping based on discovered labels ===
+    local discoveredErrorLabels = {}
+    for label, _ in pairs(ExtendedUI_DB.profile.global.discoveredErrorLabels) do
+      table.insert(discoveredErrorLabels, label)
+    end
+    table.sort(discoveredErrorLabels)
+
     for i = 1, #w.errRows do if w.errRows[i] then w.errRows[i].box:Hide() end end
-    for i, errId in ipairs(errorIds) do
+    for i, errTxt in ipairs(discoveredErrorLabels) do
       local row = EnsureErrRow(i)
       row.box:Show()
-      local errTxt = ST._dynamicErrorLabels[errId] or ""
-      row.errLabel:SetText(("Err %s%s"):format(tostring(errId), (errTxt ~= "" and " – "..errTxt or "")))
-      row.edit:SetText(mapping[errId] or "")
-      row.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); row.edit:SetText(mapping[errId] or "") end)
+      row.errLabel:SetText(errTxt)
+      row.edit:SetText(mapping[errTxt] or "")
+      row.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); row.edit:SetText(mapping[errTxt] or "") end)
       row.edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
       row.edit:SetScript("OnTextChanged", function(self)
         local new = tonumber(self:GetText())
         if new and new > 0 then
-          mapping[errId] = new
+          mapping[errTxt] = new
         else
-          mapping[errId] = nil
+          mapping[errTxt] = nil
         end
       end)
       row.testBtn:SetScript("OnClick", function()
@@ -376,13 +494,7 @@ function ST:EnsureConfigMenu()
         if sid and sid > 0 then
           PlaySoundFile(sid)
         else
-          local key = GetRaceGenderKey()
-          local t = ST.ErrorVoiceFiles[errId] and ST.ErrorVoiceFiles[errId][key]
-          if t and #t > 0 then
-            PlaySoundFile(t[math.random(#t)])
-          else
-            print("No original error speech found for this error id, race, and gender.")
-          end
+          print("No sound mapped.")
         end
       end)
       row.macroBtn:SetScript("OnClick", function()
@@ -396,20 +508,23 @@ function ST:EnsureConfigMenu()
       end)
     end
 
+    -- === Emote speech UI, mapping alle client emotes ===
     for i = 1, #w.emoteRows do if w.emoteRows[i] then w.emoteRows[i].box:Hide() end end
-    for i, emote in ipairs(ST.EmoteLabels) do
+    -- Menu haalt alle emotes uit de DB: deze wordt gerebuilt via de knop
+    local menuEmotes = ExtendedUI_DB.profile.global.allEmotes or ST.AllEmotes
+    for i, emoteCmd in ipairs(menuEmotes) do
       local row = EnsureEmoteRow(i)
       row.box:Show()
-      row.emoteLabel:SetText(emote)
-      row.edit:SetText(emoteMap[emote] or "")
-      row.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); row.edit:SetText(emoteMap[emote] or "") end)
+      row.emoteLabel:SetText(emoteCmd)
+      row.edit:SetText(emoteMap[emoteCmd] or "")
+      row.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); row.edit:SetText(emoteMap[emoteCmd] or "") end)
       row.edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
       row.edit:SetScript("OnTextChanged", function(self)
         local new = tonumber(self:GetText())
         if new and new > 0 then
-          emoteMap[emote] = new
+          emoteMap[emoteCmd] = new
         else
-          emoteMap[emote] = nil
+          emoteMap[emoteCmd] = nil
         end
       end)
       row.testBtn:SetScript("OnClick", function()
@@ -417,17 +532,12 @@ function ST:EnsureConfigMenu()
         if sid and sid > 0 then
           PlaySoundFile(sid)
         else
-          local key = GetRaceGenderKey()
-          local t = ST.EmoteVoiceFiles[key] and ST.EmoteVoiceFiles[key][emote]
-          if t and #t > 0 then
-            PlaySoundFile(t[math.random(#t)])
-          else
-            print("No original emote voice found for this emote, race, and gender.")
-          end
+          print("No custom sound mapped.")
         end
       end)
     end
 
+    -- === Soundbank sorting/search/filter unchanged ===
     local filter = searchBox:GetText() or ""
     local lowerf = filter:lower()
     local sb_sorted = {}
@@ -497,57 +607,28 @@ local function InitIfNeeded()
   end
 end
 
--- Error/Emote events
+-- ===== Error Speech handler (op errorText, debounced) =====
 local LAST_ERROR_SOUND_AT = 0
-local ERROR_SOUND_COOLDOWN = 2 -- seconde, tuneer naar wens
+local ERROR_SOUND_COOLDOWN = 2.0
 
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("UI_ERROR_MESSAGE")
 frame:SetScript("OnEvent", function(self, event, errId, errorText, ...)
   EnsureDB(); InitIfNeeded()
-  local mapping = ExtendedUI_DB.profile.global.soundTweaks
+  AddDiscoveredErrorLabel(errorText)
+  local mapping = ExtendedUI_DB.profile.global.soundTweaks or {}
   local now = GetTime()
-  if errId then
-    if errorText and errorText ~= "" then
-      SaveDynamicErrorLabel(errId, errorText)
-    end
-    if not mapping[errId] then
-      AddDynamicErrorId(errId)
-      if ST.menu and ST.menu:IsShown() and ST.menu.UpdateMenu then
-        ST.menu:Hide()
-        C_Timer.After(0.11, function() ST.menu:Show() end)
-      end
-    end
-  end
-  if mapping[errId] then
-    if now - LAST_ERROR_SOUND_AT >= ERROR_SOUND_COOLDOWN then
-      LAST_ERROR_SOUND_AT = now
-      PlaySoundFile(mapping[errId])
-    end
+  local soundId = mapping[errorText]
+  if soundId and now - LAST_ERROR_SOUND_AT >= ERROR_SOUND_COOLDOWN then
+    LAST_ERROR_SOUND_AT = now
+    PlaySoundFile(soundId)
   end
 end)
 
-local emoteFrame = CreateFrame("Frame")
-emoteFrame:RegisterEvent("CHAT_MSG_TEXT_EMOTE")
-emoteFrame:RegisterEvent("CHAT_MSG_EMOTE")
-emoteFrame:SetScript("OnEvent", function(self, event, msg, ...)
-  EnsureDB(); InitIfNeeded()
-  local emoteMap = ExtendedUI_DB.profile.global.emoteTweaks
-  for _, emote in ipairs(ST.EmoteLabels) do
-    if msg:upper():find(emote) then
-      local soundId = emoteMap[emote]
-      if soundId and soundId > 0 then
-        PlaySoundFile(soundId)
-      else
-        local key = GetRaceGenderKey()
-        local t = ST.EmoteVoiceFiles[key] and ST.EmoteVoiceFiles[key][emote]
-        if t and #t > 0 then
-          PlaySoundFile(t[math.random(#t)])
-        end
-      end
-      break
-    end
-  end
-end)
 
 InitIfNeeded()
+
+SLASH_EUISOUNDTWEAKS1 = "/soundtweaks"
+SlashCmdList.EUISOUNDTWEAKS = function()
+  ST:ToggleConfigMenu()
+end

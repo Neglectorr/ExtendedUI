@@ -99,27 +99,28 @@ end
 
 function BT:EnsureConfigMenu()
   if self.menu then return end
-  local f = CreateFrame("Frame", "EUIBuffTrackerConfig", UIParent, "BackdropTemplate")
+  local f = CreateFrame("Frame", "EUIBuffTrackerConfig", UIParent, "BasicFrameTemplateWithInset")
   self.menu = f
   f:SetFrameStrata("DIALOG")
   f:SetSize(90*COLS, 66*ROWS)
   f:SetPoint("CENTER")
-  f:SetBackdrop({
-    bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true, tileSize = 16, edgeSize = 16,
-    insets = { left = 4, right = 4, top = 4, bottom = 4 }
-  })
-  f:SetBackdropColor(0,0,0,0.93)
+  f:SetFrameLevel(4)
+  --f:SetBackdrop({
+  --  bgFile = "Interface\\Buttons\\WHITE8x8",
+  --  edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+  --  tile = true, tileSize = 16, edgeSize = 16,
+  --  insets = { left = 4, right = 4, top = 4, bottom = 4 }
+  --})
+  --f:SetBackdropColor(0,0,0,0.93)
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 16, -12)
+  title:SetPoint("TOPLEFT", 16, -5)
   title:SetText("Buff Tracker")
-  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -6, -6)
-  close:SetScript("OnClick", function()
-    f:Hide()
-    if EUI_Menu and EUI_Menu.hub then EUI_Menu.hub:Show() end
-  end)
+  --local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+  --close:SetPoint("TOPRIGHT", -6, -6)
+  --close:SetScript("OnClick", function()
+  -- f:Hide()
+  --  if EUI_Menu and EUI_Menu.hub then EUI_Menu.hub:Show() end
+  --end)
   f.filterMode = "detected"
   f.currentPage = 1
   local filterButton = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -320,6 +321,17 @@ function BT:UpdateAnchor()
   end
 end
 
+local function PlayerHasTotemBuff(slot)
+  -- Optioneel: voeg een mapping van totem buffs per slot toe
+  for i = 1, 40 do
+    local name, _, _, _, _, _, _, _, _, spellId = UnitBuff("player", i)
+    if name and name:lower():find("totem") then
+      return true
+    end
+  end
+  return false
+end
+
 local function TrackActiveTotems(buffs, tracked)
   if not GetTotemInfo then return end
   for slot=1,TOTEM_SLOTS do
@@ -332,15 +344,21 @@ local function TrackActiveTotems(buffs, tracked)
         if slotname and trackedname and slotname == trackedname then
           local remains = (startTime + duration) - GetTime()
           if remains > 0 then
-            if TotemRangeUtil:IsPlayerInRange(slot) then
-              buffs["_TOTEMSLOT_"..slot] = {
-                icon = icon,
-                duration = duration,
-                remains = remains,
-                trackedName = name,
-                trackedSlot = slot
-              }
+            local fade = false
+            if not TotemRangeUtil:IsPlayerInRange(slot) then
+              fade = true
             end
+            if (IsInInstance and IsInInstance()) and not PlayerHasTotemBuff(slot) then
+              fade = true
+            end
+            buffs["_TOTEMSLOT_"..slot] = {
+              icon = icon,
+              duration = duration,
+              remains = remains,
+              trackedName = name,
+              trackedSlot = slot,
+              fade = fade
+            }
           end
         end
       end
@@ -423,7 +441,15 @@ function BT:UpdateTrackerBars()
     end
     bar:Show()
     bar.inFade = nil
-    bar:SetAlpha(1)
+
+    -- UI fade: maak bar en onderdelen transparant als info.fade actief is
+    local fadedAlpha = (info.fade and info.fade == true) and 0.26 or 1
+    bar:SetAlpha(fadedAlpha)
+    bar.icon:SetAlpha(fadedAlpha)
+    bar.prog:SetAlpha(fadedAlpha)
+    bar.time:SetAlpha(fadedAlpha)
+    if bar.charge then bar.charge:SetAlpha(fadedAlpha) end
+
     bar.icon:SetTexture(info.icon)
     bar.prog:ClearAllPoints()
     bar.prog:SetPoint("LEFT", bar.icon, "RIGHT", 6, 0)

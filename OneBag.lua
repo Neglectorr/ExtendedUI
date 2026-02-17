@@ -221,7 +221,7 @@ function OB:EnsureFrame()
   f:SetSize(480, 420)
   f:SetFrameStrata("DIALOG")
   f:SetClampedToScreen(true)
-
+  f:SetFrameLevel(4)
   f:SetBackdrop({
     bgFile = "Interface\\Buttons\\WHITE8x8",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",

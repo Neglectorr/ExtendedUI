@@ -6,7 +6,8 @@
 ## SavedVariablesPerCharacter: ExtendedUI_DB
 
 Core.lua
-Config.lua
+ProcHelper.lua
+ActionBarTweaks.lua
 Triggers.lua
 Effects.lua
 Menu.lua
@@ -15,7 +16,9 @@ TotemTracker.lua
 BuffTracker.lua
 OneBag.lua
 LootToast.lua
-
+DynamicMageFlyout.lua
+DynamicDemonFlyout.lua
+DynamicTotemFlyout.lua
 SoundBank_GnomeMale.lua
 SoundBank_Creatures.lua
 SoundBank_DraeneiFemale.lua
@@ -38,3 +41,4 @@ SoundBank_TrollFemale.lua
 SoundBank_TrollMale.lua
 SoundBank_BloodelfFemale.lua
 SoundTweaks.lua
+Close.lua

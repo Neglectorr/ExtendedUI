@@ -28,7 +28,6 @@ local function MakeButton(parent, x, y, w, h, text, onClick)
 end
 
 M.submenus = {}
-
 function M.RegisterSubMenuFrame(frame)
   table.insert(M.submenus, frame)
 end
@@ -51,19 +50,19 @@ end
 function M.EnsureHub()
   if M.hub then return end
 
-  local w = CreateFrame("Frame", "ExtendedUIHubFrame", UIParent, "BackdropTemplate")
+  local w = CreateFrame("Frame", "ExtendedUIHubFrame", UIParent, "BasicFrameTemplateWithInset")
   M.hub = w
   w:SetSize(340, 256)
   w:SetPoint("CENTER")
   w:SetFrameStrata("DIALOG")
-  w:SetBackdrop({
-    bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true, tileSize = 16, edgeSize = 16,
-    insets = { left = 4, right = 4, top = 4, bottom = 4 },
-  })
-  w:SetBackdropColor(0, 0, 0, 0.90)
-
+  --w:SetBackdrop({
+  --  bgFile = "Interface\\Buttons\\WHITE8x8",
+  --  edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+  --  tile = true, tileSize = 16, edgeSize = 16,
+  --  insets = { left = 4, right = 4, top = 4, bottom = 4 },
+  --})
+  --w:SetBackdropColor(0, 0, 0, 0.90)
+  w:SetFrameLevel(4)
   w:EnableMouse(true)
   w:SetMovable(true)
   w:RegisterForDrag("LeftButton")
@@ -71,12 +70,12 @@ function M.EnsureHub()
   w:SetScript("OnDragStop", function() w:StopMovingOrSizing() end)
 
   local title = w:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 16, -12)
+  title:SetPoint("TOPLEFT", 16, -5)
   title:SetText("ExtendedUI")
 
-  local close = CreateFrame("Button", nil, w, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -6, -6)
-  close:SetScript("OnClick", function() M.CloseAll() end)
+  --local close = CreateFrame("Button", nil, w, "UIPanelCloseButton")
+  --close:SetPoint("TOPRIGHT", -6, -6)
+  --close:SetScript("OnClick", function() M.CloseAll() end)
 
   MakeButton(w, 18, -54, 300, 26, "Actionbar Effects", function()
     M.OpenConfigSubMenu()
@@ -91,34 +90,78 @@ function M.EnsureHub()
     M.OpenSoundTweaksSubMenu()
   end)
 
-  -- Totem Tracker knop ALTIJD voor SHAMAN, ongeacht TOTEM3D presence
   local function IsPlayerShaman()
     local _, class = UnitClass("player")
     return class == "SHAMAN"
   end
 
-  -- Voeg de knop toe indien shaman
   if IsPlayerShaman() then
+    local artSetNames = { "Set 1", "Set 2" } -- uitbreidbaar
+    local function TotemModeText()
+      local m = TOTEM3D and TOTEM3D.mode or 0
+      if m == 1 then
+        return "Toggle Totem Tracker (on - 3D)"
+      elseif m == 2 then
+        return "Toggle Totem Tracker (on - Art)"
+      else
+        return "Toggle Totem Tracker"
+      end
+    end
+
     local totemBtn = CreateFrame("Button", nil, w, "UIPanelButtonTemplate")
     totemBtn:SetPoint("TOPLEFT", 18, -206)
-    totemBtn:SetSize(300, 26)
-    totemBtn:SetText("Toggle Totem Tracker")
+    totemBtn:SetSize(212, 26)
+    totemBtn:SetText(TotemModeText())
 
     totemBtn:SetScript("OnClick", function()
-    if TOTEM3D then
-        TOTEM3D:SetEnabled(not TOTEM3D.enabled)
-        if TOTEM3D.enabled then
-            totemBtn:SetText("Toggle Totem Tracker (aan)")
-        else
-            totemBtn:SetText("Toggle Totem Tracker")
-        end
-    else
+      if TOTEM3D then
+        TOTEM3D:NextMode()
+        totemBtn:SetText(TotemModeText())
+      else
         print("TotemTracker module niet geladen. Voeg TotemTracker.lua toe aan je .toc, vóór Menu.lua!")
-		end
-	end)
-    if TOTEM3D and TOTEM3D.enabled then
-		totemBtn:SetText("Toggle Totem Tracker (aan)")
-	end
+      end
+    end)
+
+    local artDropdown = CreateFrame("Frame", "TotemArtDropdown", w, "UIDropDownMenuTemplate")
+    artDropdown:SetPoint("LEFT", totemBtn, "RIGHT", -5, -2)
+    UIDropDownMenu_SetWidth(artDropdown, 57)
+    UIDropDownMenu_SetText(artDropdown, artSetNames[TOTEM3D and (TOTEM3D.selectedArtSet or 1) or 1])
+
+    artDropdown:Hide()
+    UIDropDownMenu_Initialize(artDropdown, function(self, level)
+      for i, name in ipairs(artSetNames) do
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = name
+        info.value = i
+        info.checked = (TOTEM3D.selectedArtSet == i)
+        info.func = function()
+          TOTEM3D.selectedArtSet = i
+          UIDropDownMenu_SetText(artDropdown, name)
+          if TOTEM3D.UpdateTotems then TOTEM3D:UpdateTotems() end
+          if ExtendedUI_DB and ExtendedUI_DB.profile and ExtendedUI_DB.profile.global then
+            ExtendedUI_DB.profile.global.totemArtSelectedSet = i
+          end
+        end
+        UIDropDownMenu_AddButton(info, level)
+      end
+    end)
+
+    local menuUpdateFrame = CreateFrame("Frame")
+    menuUpdateFrame:SetScript("OnUpdate", function()
+      totemBtn:SetText(TotemModeText())
+      if TOTEM3D and TOTEM3D.mode == TOTEM3D.MODE_ART then
+        artDropdown:Show()
+        UIDropDownMenu_SetText(artDropdown, artSetNames[TOTEM3D.selectedArtSet or 1])
+      else
+        artDropdown:Hide()
+      end
+    end)
+
+    if ExtendedUI_DB and ExtendedUI_DB.profile and ExtendedUI_DB.profile.global and ExtendedUI_DB.profile.global.totemArtSelectedSet then
+      TOTEM3D.selectedArtSet = ExtendedUI_DB.profile.global.totemArtSelectedSet
+    else
+      TOTEM3D.selectedArtSet = 1
+    end
   end
 
   w:Hide()
@@ -127,20 +170,20 @@ end
 function M.EnsureOneBagSettings()
   if M.onebag then return end
 
-  local w = CreateFrame("Frame", "ExtendedUIOneBagSettingsFrame", UIParent, "BackdropTemplate")
+  local w = CreateFrame("Frame", "ExtendedUIOneBagSettingsFrame", UIParent, "BasicFrameTemplateWithInset")
   M.onebag = w
   M.RegisterSubMenuFrame(w)
   w:SetSize(520, 240)
   w:SetPoint("CENTER")
   w:SetFrameStrata("DIALOG")
-  w:SetBackdrop({
-    bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true, tileSize = 16, edgeSize = 16,
-    insets = { left = 4, right = 4, top = 4, bottom = 4 },
-  })
-  w:SetBackdropColor(0, 0, 0, 0.90)
-
+  --w:SetBackdrop({
+  --  bgFile = "Interface\\Buttons\\WHITE8x8",
+  --  edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+  --  tile = true, tileSize = 16, edgeSize = 16,
+  --  insets = { left = 4, right = 4, top = 4, bottom = 4 },
+  --})
+  --w:SetBackdropColor(0, 0, 0, 0.90)
+  w:SetFrameLevel(4)
   w:EnableMouse(true)
   w:SetMovable(true)
   w:RegisterForDrag("LeftButton")
@@ -148,15 +191,10 @@ function M.EnsureOneBagSettings()
   w:SetScript("OnDragStop", function() w:StopMovingOrSizing() end)
 
   local title = w:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 16, -12)
+  title:SetPoint("TOPLEFT", 16, -5)
   title:SetText("ExtendedUI - OneBag")
 
-  local close = CreateFrame("Button", nil, w, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -6, -6)
-  close:SetScript("OnClick", function()
-    w:Hide()
-    if M.hub then M.hub:Show() end
-  end)
+  
 
   w.enableCB, _ = MakeCheck(w, 18, -50, "Enable OneBag (B/backpack uses OneBag; Shift+B keeps vanilla)")
   w.toastCB, _ = MakeCheck(w, 18, -80, "Enable Loot Toast")
