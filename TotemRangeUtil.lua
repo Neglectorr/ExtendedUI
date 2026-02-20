@@ -2,15 +2,15 @@ local TotemRangeUtil = {}
 
 TotemRangeUtil.positions = {}  -- [slot] = {x, y, mapID, timestamp}
 TotemRangeUtil.totemCoords = {} -- [slot] = {x, y, mapID, timestamp}
-TotemRangeUtil.range = 20      -- yards; pas aan voor andere afstanden
+TotemRangeUtil.range = 20      -- yards; adjust for other distances
 
 -- Totem offsets: per slot (1=Earth, 2=Fire, 3=Water, 4=Air for TBC/Classic)
 TotemRangeUtil.offsetYards = 3 -- Totem distance in yards
 TotemRangeUtil.offsetAngles = {
-    [1] = math.rad(315), -- Earth: rechts voor
-    [2] = math.rad(45),  -- Fire: links voor
-    [3] = math.rad(135), -- Water: rechts achter
-    [4] = math.rad(225), -- Air: links achter
+    [1] = math.rad(315), -- Earth: front right
+    [2] = math.rad(45),  -- Fire: front left
+    [3] = math.rad(135), -- Water: back right
+    [4] = math.rad(225), -- Air: back left
 }
 
 -- Save exact player position (legacy fallback), plus totem position using facing!

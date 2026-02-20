@@ -200,7 +200,7 @@ function TOTEM3D:CreateFrame()
     shakeend:SetOrder(3)
     local drop = t.animGroup:CreateAnimation("Translation")
     drop:SetOffset(0, -150)
-    drop:SetDuration(0.7)              -- snellere val
+    drop:SetDuration(0.7)              -- faster drop
     drop:SetOrder(4)
     local fade = t.animGroup:CreateAnimation("Alpha")
     fade:SetFromAlpha(1)

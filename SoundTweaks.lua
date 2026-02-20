@@ -25,7 +25,7 @@ ST.AllEmotes = {
   "/whine", "/whistle", "/wicked", "/wink", "/worry", "/yawn", "/yes", "/yodel"
 }
 
--- Hardcoded fallback emotes voor UI-label alignment (bijv. HELLO, JOKE etc)
+-- Hardcoded fallback emotes for UI-label alignment (e.g. HELLO, JOKE etc)
 ST.EmoteLabels = {"HELLO", "THANKYOU", "CHEER", "JOKE", "FLIRT", "NO", "YES", "BYE", "OPENFIRE", "FOLLOW", "FLEE", "CHARGE", "HEALING"}
 
 ST.ErrorList = {}

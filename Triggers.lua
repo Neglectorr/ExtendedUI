@@ -26,6 +26,7 @@ end
 local function HasAura(unit, auraName)
   if not auraName or auraName == "" then return false end
   for i = 1, MAX_AURAS do
+    local name = UnitBuff(unit, i)
     if not name then break end
     if name == auraName then
       return true
@@ -37,6 +38,7 @@ end
 local function HasDebuff(unit, auraName)
   if not auraName or auraName == "" then return false end
   for i = 1, MAX_AURAS do
+    local name = UnitDebuff(unit, i)
     if not name then break end
     if name == auraName then
       return true
