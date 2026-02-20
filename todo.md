@@ -1,6 +1,8 @@
 # ExtendedUI – Optimization & Bug-Fix TODO
 
 > WoW TBC Classic 2.5.5 (Interface 20505) · Addon version 0.3.5 / 0.3.6
+>
+> Findings verified against [wago.tools/db2](https://wago.tools/db2) — see [`DB/verification_results.md`](DB/verification_results.md) for full cross-reference report.
 
 ---
 
@@ -41,6 +43,15 @@
 ### SoundTweaks.lua
 - [ ] **Type mismatch on error IDs** – `LoadDynamicErrorLabels` stores keys as `tonumber(id)` (line 130), but `buildErrorMenuList` later iterates with `idstr` as a string (line 156). Mixing number and string keys in lookups can cause misses.
 - [ ] **Dead code** – `menuEmotes` is assigned twice (lines 361 and 514); the first assignment is overwritten and never used.
+
+### SoundBank_*.lua (DB2-verified)
+- [ ] **126 invalid/unverifiable FileDataIDs** – Cross-referenced 2,758 sound IDs against the `SoundKitEntry` DB2 table from [wago.tools](https://wago.tools/db2). 95.4% (2,632) are valid. 126 IDs were not found in `SoundKitEntry` or `ManifestInterfaceData` and may be broken or removed. Worst offenders:
+  - `SoundBank_DwarfFemale.lua` — 17 missing
+  - `SoundBank_TaurenMale.lua` — 12 missing
+  - `SoundBank_TaurenFemale.lua` — 11 missing
+  - `SoundBank_DwarfMale.lua` — 11 missing
+  - `SoundBank_ScourgeMale.lua` — 10 missing
+  - Full list in [`DB/verification_results.md`](DB/verification_results.md). Test in-game with `/run PlaySoundFile(ID)` and remove any that produce no audio.
 
 ### Triggers.lua
 - [ ] **Redundant `and true or false`** – `ok = fn(rule, context) and true or false` (line 106) is unnecessary since the trigger functions already return booleans.
@@ -104,3 +115,14 @@
 - [ ] **Document public API per module** – Each `EUI_*` global (e.g. `EUI_Triggers`, `EUI_Effects`, `EUI_Config`, `EUI_Menu`) should have a brief header comment listing its public functions.
 - [ ] **Consolidate flyout modules** – `DynamicDemonFlyout.lua`, `DynamicMageFlyout.lua`, and `DynamicTotemFlyout.lua` share ~70 % of their logic (arrow creation, flyout layout, secure action binding). Extract a shared `DynamicFlyoutBase` module.
 - [ ] **TotemTracker rank stripping** – `StripTotemRank()` only handles English `" (Rank X)"` patterns. Will break for localized clients (French: `"Rang"`, German: `"Rang"`).
+
+---
+
+## ✅ DB2-Verified (No Action Needed)
+
+The following areas were cross-referenced against the [wago.tools/db2](https://wago.tools/db2) database and confirmed correct:
+
+- **Spell pattern detection** – All flyout modules (`DynamicDemonFlyout`, `DynamicMageFlyout`, `DynamicTotemFlyout`) use name-based spell detection. Verified against `SpellName` DB2: `"summon"` matches 18,246 spells, `"portal"` matches 2,322, `"teleport"` matches 5,204, `"(%w+) Totem"` matches 841. All patterns produce correct results.
+- **Totem categories** – Fire/Earth/Water/Air Totem all confirmed in `TotemCategory` DB2 (IDs 2–5).
+- **WoW API compatibility** – All 34 unique APIs used across 14 Lua files are available in TBC Classic 2.5.5 (including `C_Timer.After`, `C_Timer.NewTicker`, `C_Container.*`).
+- **Sound FileDataIDs** – 95.4% (2,632/2,758) of sound IDs verified in `SoundKitEntry` DB2. See bugs section for the 126 unverified IDs.
