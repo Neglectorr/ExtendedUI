@@ -77,18 +77,15 @@ function M.EnsureHub()
   --close:SetPoint("TOPRIGHT", -6, -6)
   --close:SetScript("OnClick", function() M.CloseAll() end)
 
-  MakeButton(w, 18, -54, 300, 26, "Actionbar Effects", function()
-    M.OpenConfigSubMenu()
-  end)
-  MakeButton(w, 18, -92, 300, 26, "OneBag", function()
-    M.OpenOneBagSubMenu()
-  end)
-  MakeButton(w, 18, -130, 300, 26, "Buff Tracker", function()
-    M.OpenBuffTrackerSubMenu()
-  end)
-  MakeButton(w, 18, -168, 300, 26, "Sound Tweaks", function()
-    M.OpenSoundTweaksSubMenu()
-  end)
+  local hubButtons = {
+    { y = -54, text = "Actionbar Effects", fn = function() M.OpenConfigSubMenu() end },
+    { y = -92, text = "OneBag", fn = function() M.OpenOneBagSubMenu() end },
+    { y = -130, text = "Buff Tracker", fn = function() M.OpenBuffTrackerSubMenu() end },
+    { y = -168, text = "Sound Tweaks", fn = function() M.OpenSoundTweaksSubMenu() end },
+  }
+  for _, info in ipairs(hubButtons) do
+    MakeButton(w, 18, info.y, 300, 26, info.text, info.fn)
+  end
 
   local function IsPlayerShaman()
     local _, class = UnitClass("player")
@@ -96,7 +93,7 @@ function M.EnsureHub()
   end
 
   if IsPlayerShaman() then
-    local artSetNames = { "Set 1", "Set 2" } -- uitbreidbaar
+    local artSetNames = { "Set 1", "Set 2" } -- extensible
     local function TotemModeText()
       local m = TOTEM3D and TOTEM3D.mode or 0
       if m == 1 then
@@ -118,7 +115,7 @@ function M.EnsureHub()
         TOTEM3D:NextMode()
         totemBtn:SetText(TotemModeText())
       else
-        print("TotemTracker module niet geladen. Voeg TotemTracker.lua toe aan je .toc, vóór Menu.lua!")
+        print("TotemTracker module not loaded. Add TotemTracker.lua to your .toc before Menu.lua!")
       end
     end)
 
@@ -147,7 +144,11 @@ function M.EnsureHub()
     end)
 
     local menuUpdateFrame = CreateFrame("Frame")
-    menuUpdateFrame:SetScript("OnUpdate", function()
+    local menuUpdateElapsed = 0
+    menuUpdateFrame:SetScript("OnUpdate", function(_, dt)
+      menuUpdateElapsed = menuUpdateElapsed + dt
+      if menuUpdateElapsed < 0.25 then return end
+      menuUpdateElapsed = 0
       totemBtn:SetText(TotemModeText())
       if TOTEM3D and TOTEM3D.mode == TOTEM3D.MODE_ART then
         artDropdown:Show()

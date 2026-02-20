@@ -25,7 +25,7 @@ ST.AllEmotes = {
   "/whine", "/whistle", "/wicked", "/wink", "/worry", "/yawn", "/yes", "/yodel"
 }
 
--- Hardcoded fallback emotes voor UI-label alignment (bijv. HELLO, JOKE etc)
+-- Hardcoded fallback emotes for UI-label alignment (e.g. HELLO, JOKE etc)
 ST.EmoteLabels = {"HELLO", "THANKYOU", "CHEER", "JOKE", "FLIRT", "NO", "YES", "BYE", "OPENFIRE", "FOLLOW", "FLEE", "CHARGE", "HEALING"}
 
 ST.ErrorList = {}
@@ -121,13 +121,14 @@ local function AddDynamicErrorId(errId)
   end
   table.insert(ST._dynamicErrors, errId)
   SaveDynamicErrors()
+  InvalidateErrorMenuCache()
 end
 
 local function LoadDynamicErrorLabels()
   EnsureDB()
   wipe(ST._dynamicErrorLabels)
   for id, label in pairs(ExtendedUI_DB.profile.global.dynamicErrorLabels) do
-    ST._dynamicErrorLabels[tonumber(id)] = label
+    ST._dynamicErrorLabels[tostring(id)] = label
   end
 end
 
@@ -144,7 +145,17 @@ local function AddDiscoveredErrorLabel(errorText)
   end
 end
 
+-- Cached error menu list with dirty-flag invalidation
+local _errorMenuCache = nil
+local _errorMenuDirty = true
+
+local function InvalidateErrorMenuCache()
+  _errorMenuDirty = true
+  _errorMenuCache = nil
+end
+
 local function buildErrorMenuList()
+  if not _errorMenuDirty and _errorMenuCache then return _errorMenuCache end
   local seen, out = {}, {}
   for _, id in ipairs(ST.ErrorList) do
     if not seen[id] then table.insert(out, id); seen[id]=true end
@@ -158,6 +169,8 @@ local function buildErrorMenuList()
     if id and not seen[id] then table.insert(out, id); seen[id]=true end
   end
   table.sort(out)
+  _errorMenuCache = out
+  _errorMenuDirty = false
   return out
 end
 
@@ -358,8 +371,6 @@ function ST:EnsureConfigMenu()
   w.emoteContent = emoteContent
   w.emoteRows = {}
 
-  local menuEmotes = ExtendedUI_DB.profile.global.allEmotes or ST.AllEmotes
-
   local function EnsureErrRow(i)
     if w.errRows[i] then return w.errRows[i] end
     local row = {}
@@ -458,6 +469,28 @@ function ST:EnsureConfigMenu()
     return row
   end
 
+  -- Shared handler for sound mapping rows (error speech & emote speech)
+  local function SetupSoundMappingRow(row, key, mappingTable)
+    row.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); self:SetText(mappingTable[key] or "") end)
+    row.edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    row.edit:SetScript("OnTextChanged", function(self)
+      local new = tonumber(self:GetText())
+      if new and new > 0 then
+        mappingTable[key] = new
+      else
+        mappingTable[key] = nil
+      end
+    end)
+    row.testBtn:SetScript("OnClick", function()
+      local sid = tonumber(row.edit:GetText())
+      if sid and sid > 0 then
+        PlaySoundFile(sid)
+      else
+        print("No sound mapped.")
+      end
+    end)
+  end
+
   function w.UpdateMenu()
     EnsureDB()
     LoadDynamicErrors()
@@ -479,24 +512,7 @@ function ST:EnsureConfigMenu()
       row.box:Show()
       row.errLabel:SetText(errTxt)
       row.edit:SetText(mapping[errTxt] or "")
-      row.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); row.edit:SetText(mapping[errTxt] or "") end)
-      row.edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-      row.edit:SetScript("OnTextChanged", function(self)
-        local new = tonumber(self:GetText())
-        if new and new > 0 then
-          mapping[errTxt] = new
-        else
-          mapping[errTxt] = nil
-        end
-      end)
-      row.testBtn:SetScript("OnClick", function()
-        local sid = tonumber(row.edit:GetText())
-        if sid and sid > 0 then
-          PlaySoundFile(sid)
-        else
-          print("No sound mapped.")
-        end
-      end)
+      SetupSoundMappingRow(row, errTxt, mapping)
       row.macroBtn:SetScript("OnClick", function()
         local sid = tonumber(row.edit:GetText())
         if sid and sid > 0 then
@@ -508,33 +524,15 @@ function ST:EnsureConfigMenu()
       end)
     end
 
-    -- === Emote speech UI, mapping alle client emotes ===
+    -- === Emote speech UI, mapping all client emotes ===
     for i = 1, #w.emoteRows do if w.emoteRows[i] then w.emoteRows[i].box:Hide() end end
-    -- Menu haalt alle emotes uit de DB: deze wordt gerebuilt via de knop
     local menuEmotes = ExtendedUI_DB.profile.global.allEmotes or ST.AllEmotes
     for i, emoteCmd in ipairs(menuEmotes) do
       local row = EnsureEmoteRow(i)
       row.box:Show()
       row.emoteLabel:SetText(emoteCmd)
       row.edit:SetText(emoteMap[emoteCmd] or "")
-      row.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); row.edit:SetText(emoteMap[emoteCmd] or "") end)
-      row.edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-      row.edit:SetScript("OnTextChanged", function(self)
-        local new = tonumber(self:GetText())
-        if new and new > 0 then
-          emoteMap[emoteCmd] = new
-        else
-          emoteMap[emoteCmd] = nil
-        end
-      end)
-      row.testBtn:SetScript("OnClick", function()
-        local sid = tonumber(row.edit:GetText())
-        if sid and sid > 0 then
-          PlaySoundFile(sid)
-        else
-          print("No custom sound mapped.")
-        end
-      end)
+      SetupSoundMappingRow(row, emoteCmd, emoteMap)
     end
 
     -- === Soundbank sorting/search/filter unchanged ===

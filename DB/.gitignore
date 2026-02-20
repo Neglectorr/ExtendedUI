@@ -1,0 +1,2 @@
+# Large DB2 CSV data files (downloaded by fetch_db2.py)
+*.csv
