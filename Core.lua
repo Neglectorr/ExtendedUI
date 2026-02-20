@@ -1,6 +1,11 @@
 ExtendedUI = ExtendedUI or {}
 local EUI = ExtendedUI
-print("Core Loaded")
+
+local GetTime = GetTime
+local pairs = pairs
+local tostring = tostring
+local type = type
+
 EUI.name = "ExtendedUI"
 EUI.version = "0.3.6"
 EUI.BAR_PREFIX = {
@@ -83,7 +88,7 @@ function EUI:GetButtonFrame(barId, slot)
   return _G[prefix .. tostring(slot)]
 end
 
--- ==== Overlay functions (oud, blijft bestaan!) ====
+-- ==== Overlay functions ====
 function EUI:EnsureOverlay(btn)
   if not btn or btn.ExtendedUIOverlay then return end
 
@@ -160,18 +165,14 @@ function EUI:ApplySlot(barId, slot)
   local p = ExtendedUI_DB.profile
   if not p.global.enabled then
     self:EnsureOverlay(btn)
-    self:ClearLane(btn, "A")
-    self:ClearLane(btn, "B")
-    self:ClearLane(btn, "C")
+    for _, lane in ipairs(self.LANE) do self:ClearLane(btn, lane) end
     return
   end
   local slotCfg = p.bars[barId] and p.bars[barId][slot]
   if not slotCfg or not slotCfg.rules then return end
   self:EnsureOverlay(btn)
   if not SlotHasAnyActiveEffect(slotCfg) then
-    self:ClearLane(btn, "A")
-    self:ClearLane(btn, "B")
-    self:ClearLane(btn, "C")
+    for _, lane in ipairs(self.LANE) do self:ClearLane(btn, lane) end
     return
   end
   local now = GetTime()
@@ -220,14 +221,18 @@ function EUI:StartEngine()
   f:RegisterEvent("PLAYER_REGEN_ENABLED")
   f:RegisterEvent("PLAYER_REGEN_DISABLED")
   local elapsed = 0
+  local cachedInterval = 0.10
   f:SetScript("OnUpdate", function(_, dt)
     elapsed = elapsed + dt
-    local interval = (ExtendedUI_DB and ExtendedUI_DB.profile and ExtendedUI_DB.profile.global and ExtendedUI_DB.profile.global.updateInterval) or 0.10
-    if elapsed < interval then return end
+    if elapsed < cachedInterval then return end
     elapsed = 0
     EUI:ApplyAll()
   end)
   f:SetScript("OnEvent", function(_, event, unit)
+    if event == "PLAYER_ENTERING_WORLD" then
+      local g = ExtendedUI_DB and ExtendedUI_DB.profile and ExtendedUI_DB.profile.global
+      cachedInterval = (g and g.updateInterval) or 0.10
+    end
     if event == "UNIT_AURA" and unit ~= "player" and unit ~= "target" then return end
     EUI:ApplyAll()
   end)
@@ -242,7 +247,7 @@ local function TryToggleMainMenu()
   return false
 end
 
--- (optioneel: slash command voor proc config menu)
+-- Slash command
 SlashCmdList["EXTENDEDUI"] = function(_msg)
   if not TryToggleMainMenu() then
     EUI._pendingMainToggle = true
@@ -283,8 +288,8 @@ btn.border:SetPoint("CENTER", btn, "CENTER", 10, -10)
 btn.border:SetSize(54, 54)
 btn:SetScript("OnEnter", function(self)
   GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-  GameTooltip:SetText("ExtendedUI Hoofdmenu", 1, 1, 1)
-  GameTooltip:AddLine("LeftClick Show/Hide", .8, .8, .8)
+  GameTooltip:SetText("ExtendedUI Main Menu", 1, 1, 1)
+  GameTooltip:AddLine("Left-click to Show/Hide", .8, .8, .8)
   GameTooltip:Show()
 end)
 btn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)

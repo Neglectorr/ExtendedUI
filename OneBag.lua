@@ -11,12 +11,55 @@ local ORIG_OpenBackpack
 local ORIG_OpenBag
 local ORIG_CloseAllBags
 
+local math_floor = math.floor
+local string_format = string.format
+local string_lower = string.lower
+local string_find = string.find
+local pairs = pairs
+local tonumber = tonumber
+
 -- ===== Tuning =====
 local BORDER_THICKNESS = 2
 local BORDER_ALPHA = 1.0
 local SLOT_BG_ALPHA = 0.35
 local ICON_INSET = 2
 -- ==================
+
+-- ===== Bag API compatibility shim =====
+local BagAPI = {}
+
+function BagAPI.GetNumSlots(bag)
+  if C_Container and C_Container.GetContainerNumSlots then
+    return C_Container.GetContainerNumSlots(bag) or 0
+  end
+  if GetContainerNumSlots then
+    return GetContainerNumSlots(bag) or 0
+  end
+  return 0
+end
+
+function BagAPI.GetItemLink(bag, slot)
+  if C_Container and C_Container.GetContainerItemLink then
+    return C_Container.GetContainerItemLink(bag, slot)
+  end
+  if GetContainerItemLink then
+    return GetContainerItemLink(bag, slot)
+  end
+  return nil
+end
+
+function BagAPI.GetContainerInfo(bag, slot)
+  if C_Container and C_Container.GetContainerItemInfo then
+    local info = C_Container.GetContainerItemInfo(bag, slot)
+    if not info then return nil, nil, nil, nil end
+    return info.iconFileID, info.stackCount, info.hyperlink, info.quality
+  end
+  if GetContainerItemInfo then
+    local icon, count, _, quality, _, _, link2 = GetContainerItemInfo(bag, slot)
+    return icon, count, link2, quality
+  end
+  return nil, nil, nil, nil
+end
 
 local function EnsureDB()
   ExtendedUI_DB = ExtendedUI_DB or {}
@@ -41,40 +84,6 @@ end
 local function BagMinMax()
   local max = (type(NUM_BAG_SLOTS) == "number" and NUM_BAG_SLOTS) or 4
   return 0, max
-end
-
-local function GetNumSlots(bag)
-  if C_Container and C_Container.GetContainerNumSlots then
-    return C_Container.GetContainerNumSlots(bag) or 0
-  end
-  if GetContainerNumSlots then
-    return GetContainerNumSlots(bag) or 0
-  end
-  return 0
-end
-
-local function GetItemLink(bag, slot)
-  if C_Container and C_Container.GetContainerItemLink then
-    return C_Container.GetContainerItemLink(bag, slot)
-  end
-  if GetContainerItemLink then
-    return GetContainerItemLink(bag, slot)
-  end
-  return nil
-end
-
--- returns: icon, count, link, quality
-local function GetContainerInfo(bag, slot)
-  if C_Container and C_Container.GetContainerItemInfo then
-    local info = C_Container.GetContainerItemInfo(bag, slot)
-    if not info then return nil, nil, nil, nil end
-    return info.iconFileID, info.stackCount, info.hyperlink, info.quality
-  end
-  if GetContainerItemInfo then
-    local icon, count, _, quality, _, _, link2 = GetContainerItemInfo(bag, slot)
-    return icon, count, link2, quality
-  end
-  return nil, nil, nil, nil
 end
 
 local function PlaceButtonInGrid(f, b, idx)
@@ -209,7 +218,7 @@ local function CloseVanillaBags()
   end
 end
 
--------------- FRAME LOGIC MET ZOEKVELD --------------
+-------------- FRAME LOGIC WITH SEARCH FIELD --------------
 
 function OB:EnsureFrame()
   if self.frame then return end
@@ -241,7 +250,7 @@ function OB:EnsureFrame()
   local playerName = UnitName and UnitName("player") or "Character"
   title:SetText(string.format("%s's bags", playerName))
 
-  -- Searchbox (nieuw!)
+  -- Search box
   local searchBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
   searchBox:SetSize(140,20)
   searchBox:SetPoint("TOPRIGHT", -160, -12)
@@ -387,7 +396,7 @@ function OB:Layout()
   local idx = 0
 
   for bag = bagMin, bagMax do
-    local n = GetNumSlots(bag)
+    local n = BagAPI.GetNumSlots(bag)
     for slot = 1, n do
       idx = idx + 1
       local b = f.slots[idx]
@@ -455,8 +464,8 @@ function OB:Update()
   for i = 1, #f.slots do
     local b = f.slots[i]
     if b and b:IsShown() then
-      local icon, count, link, quality = GetContainerInfo(b.bag, b.slot)
-      if not link then link = GetItemLink(b.bag, b.slot) end
+      local icon, count, link, quality = BagAPI.GetContainerInfo(b.bag, b.slot)
+      if not link then link = BagAPI.GetItemLink(b.bag, b.slot) end
 
       local name
       if link then name = GetItemInfo(link) end
@@ -590,6 +599,21 @@ vendor:SetScript("OnEvent", function()
   OB:Show()
 end)
 
+-- Debounce Layout/Update to avoid rapid-fire relayouts from multiple bag events
+local _bagUpdatePending = false
+local function DebouncedBagUpdate()
+  if _bagUpdatePending then return end
+  _bagUpdatePending = true
+  C_Timer.After(0.05, function()
+    _bagUpdatePending = false
+    if OB.frame and OB.frame:IsShown() then
+      OB:Layout()
+      OB:Update()
+      OB:UpdateMoney()
+    end
+  end)
+end
+
 local evt = CreateFrame("Frame")
 evt:RegisterEvent("BAG_UPDATE")
 evt:RegisterEvent("BAG_UPDATE_DELAYED")
@@ -604,12 +628,10 @@ evt:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_MONEY" or event == "SEND_MAIL_MONEY_CHANGED" or event == "SEND_MAIL_COD_CHANGED" or event == "TRADE_MONEY_CHANGED" then
       OB:UpdateMoney()
     else
-      OB:Layout()
-      OB:Update()
-      OB:UpdateMoney()
+      DebouncedBagUpdate()
     end
   end
 end)
 
--- >>> Enable direct bij laden zodat 'B' en 'Shift+B' werken <<<
+-- >>> Enable on load so 'B' and 'Shift+B' work <<<
 EUI:OneBag_SetEnabled(true)

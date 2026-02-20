@@ -4,8 +4,8 @@ TotemRangeUtil.positions = {}  -- [slot] = {x, y, mapID, timestamp}
 TotemRangeUtil.totemCoords = {} -- [slot] = {x, y, mapID, timestamp}
 TotemRangeUtil.range = 20      -- yards; pas aan voor andere afstanden
 
--- Totem offsets: per slot (1=Aarde, 2=Vuur, 3=Water, 4=Lucht bij TBC/Classic)
-TotemRangeUtil.offsetYards = 3 -- Totem afstand in yards (~2.7 meter)
+-- Totem offsets: per slot (1=Earth, 2=Fire, 3=Water, 4=Air for TBC/Classic)
+TotemRangeUtil.offsetYards = 3 -- Totem distance in yards
 TotemRangeUtil.offsetAngles = {
     [1] = math.rad(315), -- Earth: rechts voor
     [2] = math.rad(45),  -- Fire: links voor
@@ -19,7 +19,7 @@ function TotemRangeUtil:SavePosition(slot)
     local facing = GetPlayerFacing() -- radians, 0 = north
     if x and y and mapID and facing then
         self.positions[slot] = {x=x, y=y, mapID=mapID, timestamp=GetTime()}
-        -- Bereken totem positie
+        -- Calculate totem position
         local angle = self.offsetAngles[slot] or 0
         local ox = math.cos(facing + angle) * self.offsetYards
         local oy = math.sin(facing + angle) * self.offsetYards
@@ -44,7 +44,7 @@ function TotemRangeUtil:IsPlayerInRange(slot)
     return nil -- no position known; status unknown
 end
 
--- Event handler: Alleen hier de positie EN de totem-coord opslaan
+-- Event handler: save position and totem coordinates here only
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("PLAYER_TOTEM_UPDATE")
 eventFrame:SetScript("OnEvent", function(_, _, slot)
@@ -54,5 +54,5 @@ eventFrame:SetScript("OnEvent", function(_, _, slot)
     end
 end)
 
-_G.TotemRangeUtil = TotemRangeUtil  -- Globaal beschikbaar maken (optioneel)
+_G.TotemRangeUtil = TotemRangeUtil  -- Make globally available
 return TotemRangeUtil

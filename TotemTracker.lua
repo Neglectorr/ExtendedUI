@@ -1,9 +1,21 @@
 TOTEM3D = {}
 
+local GetTime = GetTime
+local GetTotemInfo = GetTotemInfo
+local GetActionInfo = GetActionInfo
+local GetSpellInfo = GetSpellInfo
+local UnitBuff = UnitBuff
+local IsInInstance = IsInInstance
+local math_min = math.min
+local math_floor = math.floor
+local pairs = pairs
+
+local MAX_AURAS = 40
+
 TOTEM3D.MODE_OFF = 0
 TOTEM3D.MODE_3D = 1
 TOTEM3D.MODE_ART = 2
-TOTEM3D.modes = { "Uit", "3D models", "Art" }
+TOTEM3D.modes = { "Off", "3D models", "Art" }
 TOTEM3D.mode = TOTEM3D.MODE_3D
 TOTEM3D.selectedArtSet = TOTEM3D.selectedArtSet or 1
 
@@ -36,7 +48,7 @@ local function IsInDungeon()
 end
 
 local function PlayerHasTotemBuff(slot)
-  for i = 1, 40 do
+  for i = 1, MAX_AURAS do
     local name = UnitBuff("player", i)
     if name and name:lower():find("totem") then
       return true
@@ -67,7 +79,20 @@ local function StripTotemRank(name)
   return out
 end
 
+-- Cache for FindSnapButtonForTotem; invalidated on PLAYER_TOTEM_UPDATE
+local _snapCache = {}
+local _snapCacheValid = false
+
+local function InvalidateSnapCache()
+  wipe(_snapCache)
+  _snapCacheValid = false
+end
+
 local function FindSnapButtonForTotem(totemName)
+  if _snapCacheValid and _snapCache[totemName] ~= nil then
+    return _snapCache[totemName] or nil  -- false means "not found"
+  end
+
   local possibleBars = {
     "ActionButton",
     "MultiBarBottomLeftButton",
@@ -87,11 +112,17 @@ local function FindSnapButtonForTotem(totemName)
         if typ == "spell" and spellId then
           local btnSpellName = GetSpellInfo(spellId)
           if btnSpellName and StripTotemRank(btnSpellName) == StripTotemRank(totemName) then
+            local result
             local aboveBtn = _G["MultiBarBottomLeftButton"..i]
-            if aboveBtn and aboveBtn:IsShown() then return aboveBtn end
-            aboveBtn = _G["MultiBarBottomRightButton"..i]
-            if aboveBtn and aboveBtn:IsShown() then return aboveBtn end
-            return btn
+            if aboveBtn and aboveBtn:IsShown() then result = aboveBtn
+            else
+              aboveBtn = _G["MultiBarBottomRightButton"..i]
+              if aboveBtn and aboveBtn:IsShown() then result = aboveBtn
+              else result = btn end
+            end
+            _snapCache[totemName] = result
+            _snapCacheValid = true
+            return result
           end
         end
       end
@@ -111,6 +142,8 @@ local function FindSnapButtonForTotem(totemName)
           if typ == "spell" and spellId then
             local btnSpellName = GetSpellInfo(spellId)
             if btnSpellName and StripTotemRank(btnSpellName) == StripTotemRank(totemName) then
+              _snapCache[totemName] = btn
+              _snapCacheValid = true
               return btn
             end
           end
@@ -118,6 +151,8 @@ local function FindSnapButtonForTotem(totemName)
       end
     end
   end
+  _snapCache[totemName] = false
+  _snapCacheValid = true
   return nil
 end
 
@@ -149,7 +184,7 @@ function TOTEM3D:CreateFrame()
     t:Hide()
     self.arts[slot] = t
 
-     -- Fade/drop animatiegroep (val, shake, en fade)
+     -- Fade/drop animation group (fall, shake, and fade)
     t.animGroup = t:CreateAnimationGroup()
     local shake = t.animGroup:CreateAnimation("Translation")
     shake:SetOffset(12, 0)
@@ -181,7 +216,7 @@ function TOTEM3D:CreateFrame()
       t.isFading = nil
     end)
 	
-    -- Appear/spring anim (bij verschijnen)
+    -- Appear/spring animation (on first show)
     t.appearAnimGroup = t:CreateAnimationGroup()
 	
 	local springUp = t.appearAnimGroup:CreateAnimation("Translation")
@@ -207,9 +242,16 @@ function TOTEM3D:CreateFrame()
     t.appearAnimGroup:SetScript("OnFinished", function()
       t:ClearAllPoints()
       t:SetPoint("BOTTOM", t.anchorBtn or self.frame, "TOP", 0, 0)
-      -- Zet geen t.wasShown = nil hier, alleen bij fade!
     end)
   end
+end
+
+local function HasAnyActiveTotem()
+  for slot = 1, 4 do
+    local haveTotem, _, _, duration = GetTotemInfo(slot)
+    if haveTotem and duration and duration > 0 then return true end
+  end
+  return false
 end
 
 function TOTEM3D:UpdateTotems()
@@ -291,7 +333,7 @@ function TOTEM3D:UpdateTotems()
           else
             art:SetAlpha(1)
           end
-          -- Appear animatie bij nieuw verschijnen
+          -- Appear animation on first show
           if not art.wasShown then
             art.appearAnimGroup:Play()
             art.wasShown = true
@@ -303,12 +345,12 @@ function TOTEM3D:UpdateTotems()
           art.isFading = nil
         end
       else
-        -- Fade/drop/shake anim eenmalig bij disappear
+        -- One-time fade/drop/shake animation on disappear
         if wasVisible and art.animGroup and not art.isFading then
           art.isFading = true
           art.animGroup:Play()
         end
-        -- Geen Hide/reset hier; gebeurt pas in animGroup OnFinished
+        -- No Hide/reset here; happens in animGroup OnFinished
       end
     end
   end
@@ -359,6 +401,17 @@ end
 function TOTEM3D:StartTrackerLoop()
   if totemTicker then totemTicker:Cancel() end
   totemTicker = C_Timer.NewTicker(0.15, function()
+    -- Throttle: if no totems are active and no art is still fading, pause the ticker
+    if not HasAnyActiveTotem() then
+      local anyFading = false
+      for i = 1, 4 do
+        if self.arts[i] and self.arts[i].isFading then anyFading = true; break end
+      end
+      if not anyFading then
+        self:StopTrackerLoop()
+        return
+      end
+    end
     self:UpdateTotems()
   end)
 end
@@ -371,7 +424,8 @@ end
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_TOTEM_UPDATE")
-eventFrame:SetScript("OnEvent", function()
+eventFrame:SetScript("OnEvent", function(_, event)
+  InvalidateSnapCache()
   if TOTEM3D:GetEnabled() then
     TOTEM3D:Show()
     TOTEM3D:StartTrackerLoop()

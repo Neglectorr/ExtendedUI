@@ -3,6 +3,24 @@ EUI_BuffTracker = {}
 local BT = EUI_BuffTracker
 EUI.BuffTracker = BT
 
+local GetTime = GetTime
+local UnitBuff = UnitBuff
+local GetTotemInfo = GetTotemInfo
+local GetSpellInfo = GetSpellInfo
+local GetSpellTexture = GetSpellTexture
+local pairs = pairs
+local ipairs = ipairs
+local math_max = math.max
+local math_min = math.min
+local math_ceil = math.ceil
+local math_floor = math.floor
+local string_format = string.format
+local table_insert = table.insert
+local table_sort = table.sort
+local wipe = wipe
+
+local MAX_AURAS = 40
+
 local COLS, ROWS = 8, 6
 local SPELLS_PER_PAGE = COLS * ROWS
 local FADER_TIME = 0.5
@@ -321,9 +339,26 @@ function BT:UpdateAnchor()
   end
 end
 
+-- Reusable table pool for buff entries to reduce GC pressure
+local _buffPool = {}
+local _buffPoolSize = 0
+local function AcquireBuff()
+  if _buffPoolSize > 0 then
+    local b = _buffPool[_buffPoolSize]
+    _buffPool[_buffPoolSize] = nil
+    _buffPoolSize = _buffPoolSize - 1
+    return b
+  end
+  return {}
+end
+local function ReleaseBuff(b)
+  wipe(b)
+  _buffPoolSize = _buffPoolSize + 1
+  _buffPool[_buffPoolSize] = b
+end
+
 local function PlayerHasTotemBuff(slot)
-  -- Optioneel: voeg een mapping van totem buffs per slot toe
-  for i = 1, 40 do
+  for i = 1, MAX_AURAS do
     local name, _, _, _, _, _, _, _, _, spellId = UnitBuff("player", i)
     if name and name:lower():find("totem") then
       return true
@@ -366,21 +401,31 @@ local function TrackActiveTotems(buffs, tracked)
   end
 end
 
-local function GetActiveTrackedBuffs()
-  local buffs, tracked = {}, EUI.DB.profile.global.buffTrackerList or {}
+local _lastBuffs = {}
 
-  for i=1, 40 do
+local function GetActiveTrackedBuffs()
+  -- Release previously allocated buff entries back to pool
+  for i = #_lastBuffs, 1, -1 do
+    ReleaseBuff(_lastBuffs[i])
+    _lastBuffs[i] = nil
+  end
+
+  local db = EUI.DB and EUI.DB.profile and EUI.DB.profile.global
+  local tracked = db and db.buffTrackerList or {}
+  local buffs = {}
+
+  for i = 1, MAX_AURAS do
     local _, icon, count, _, duration, expires, _, _, _, spellId = UnitBuff("player", i)
     if spellId and tracked[spellId] then
-      local remains = expires and (expires-GetTime()) or 0
+      local remains = expires and (expires - GetTime()) or 0
       if remains > 0 then
-        buffs[spellId] = { 
-          icon=icon,
-          duration=duration,
-          expires=expires,
-          remains=remains,
-          count=count or 0         -- charge/stack toevoegen
-        }
+        local entry = AcquireBuff()
+        entry.icon = icon
+        entry.duration = duration
+        entry.expires = expires
+        entry.remains = remains
+        entry.count = count or 0
+        buffs[spellId] = entry
       end
     end
   end
@@ -388,8 +433,9 @@ local function GetActiveTrackedBuffs()
   TrackActiveTotems(buffs, tracked)
 
   local b = {}
-  for _, v in pairs(buffs) do b[#b+1]=v end
-  table.sort(b, function(a, b) return a.remains > b.remains end)
+  for _, v in pairs(buffs) do b[#b + 1] = v end
+  table_sort(b, function(a, b) return a.remains > b.remains end)
+  _lastBuffs = b
   return b
 end
 
@@ -431,7 +477,7 @@ function BT:UpdateTrackerBars()
         bar:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -((i-1)*(barHeight+spacing)))
         bar.inFade = nil
       end)
-      -- Charge text toevoegen (overlay)
+      -- Charge text overlay
       bar.charge = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
       bar.charge:SetPoint("TOPRIGHT", bar.icon, "CENTER", 4, 6)
       bar.charge:SetJustifyH("RIGHT")
@@ -442,7 +488,7 @@ function BT:UpdateTrackerBars()
     bar:Show()
     bar.inFade = nil
 
-    -- UI fade: maak bar en onderdelen transparant als info.fade actief is
+    -- UI fade: bar and elements transparent when info.fade is active
     local fadedAlpha = (info.fade and info.fade == true) and 0.26 or 1
     bar:SetAlpha(fadedAlpha)
     bar.icon:SetAlpha(fadedAlpha)
@@ -461,7 +507,7 @@ function BT:UpdateTrackerBars()
     bar.time:Show()
     bar:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -((i-1)*(barHeight+spacing)))
     bar:SetHeight(barHeight)
-    -- Charge/stack weergeven
+    -- Charge/stack display
     if info.count and info.count > 1 then
       bar.charge:SetText(info.count)
       bar.charge:Show()

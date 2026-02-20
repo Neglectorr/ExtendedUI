@@ -1,8 +1,15 @@
 EUI_Config = {}
 local C = EUI_Config
 
-local BagItems = { list = {}, byId = {} }
+local BagItems = { list = {}, byId = {}, dirty = true }
+
+local function InvalidateBagCache()
+  BagItems.dirty = true
+end
+
 local function ScanBags()
+  if not BagItems.dirty then return end
+  BagItems.dirty = false
   BagItems.list = {}
   BagItems.byId = {}
   local seen = {}
@@ -210,6 +217,7 @@ local function EnsureWindow()
   refreshItems:SetPoint("TOPLEFT", 650, -60)
   refreshItems:SetText("Refresh items")
   refreshItems:SetScript("OnClick", function()
+    InvalidateBagCache()
     ScanBags()
     if C.Refresh then C.Refresh() end
   end)
@@ -357,7 +365,7 @@ local function EnsureWindow()
     p.debuffEdit = MakeEdit(box, x1, y1, 320)
     p.debuffL = MakeSmallLabel(box, p.debuffEdit, "Debuff name (exact)")
 
-    -- TotemSlot dropdown (verplicht)
+    -- Totem slot dropdown
     p.totemSlotDD = MakeDropDown(box, x1, y1, 120)
     p.totemSlotL = MakeSmallLabel(box, p.totemSlotDD, "Totem slot")
 
@@ -641,7 +649,7 @@ local function EnsureWindow()
         if type(key) ~= "string" then key = "GOLD" end
         UIDropDownMenu_SetText(ui.params.colorDD, ColorKeyToText(key))
       end
-      -- TotemSlot dropdown (verplicht)
+      -- Totem slot dropdown
       UIDropDownMenu_Initialize(ui.params.totemSlotDD, function(self, level)
         local info = UIDropDownMenu_CreateInfo()
         for _, slotInfo in ipairs(TotemSlotLookup) do

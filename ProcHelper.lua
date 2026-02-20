@@ -1,6 +1,29 @@
 ProcHelper = ProcHelper or {}
 local PH = ProcHelper
 
+local GetTime = GetTime
+local GetSpellInfo = GetSpellInfo
+local GetSpellTexture = GetSpellTexture
+local UnitBuff = UnitBuff
+local GetActionInfo = GetActionInfo
+local pairs = pairs
+local ipairs = ipairs
+local tonumber = tonumber
+local tostring = tostring
+local table_insert = table.insert
+local table_remove = table.remove
+local math_max = math.max
+
+-- Spell info cache to avoid repeated GetSpellInfo calls for the same IDs
+local _spellInfoCache = {}
+local function CachedGetSpellInfo(id)
+  local cached = _spellInfoCache[id]
+  if cached then return cached[1], cached[2], cached[3] end
+  local name, rank, icon = GetSpellInfo(id)
+  if name then _spellInfoCache[id] = { name, rank, icon } end
+  return name, rank, icon
+end
+
 local PROC_ICON_SIZE = 38
 local PROC_ICON_SPACING = 8
 
@@ -100,11 +123,11 @@ end
 
 function PH:GetActionbarIconBySpellName(spellName)
     if not spellName or spellName == "" then return nil end
-    -- Doorzoek alle main actionbar slots (1-120 = elk standaard actionbar, incl. multibars...)
+    -- Search all main actionbar slots (1-120, including multibars)
     for slot = 1, 120 do
         local type, id, subType = GetActionInfo(slot)
         if type == "spell" and id then
-            local name = GetSpellInfo(id)
+            local name = CachedGetSpellInfo(id)
             if name == spellName then
                 local btn
                 if slot <= 12 then
@@ -129,7 +152,7 @@ function PH:GetActionbarIconBySpellName(spellName)
                 end
             end
         end
-        -- Kun je uitbreiden voor macros etc. als gewenst
+        -- Can be extended for macros etc. if desired
     end
     return nil
 end
@@ -142,7 +165,7 @@ function PH:_BuffActuallyActive(entry)
     local tryId = tonumber(key)
     local wantName, forceIcon
     if tryId then
-        local name, _, icon = GetSpellInfo(tryId)
+        local name, _, icon = CachedGetSpellInfo(tryId)
         wantName = name or key
         forceIcon = icon
     else
@@ -168,7 +191,7 @@ function PH:_BuffActuallyActive(entry)
             return true, useIcon or "Interface\\Icons\\INV_Misc_QuestionMark"
         end
     end
-    -- Geen buff actief: probeer alsnog iconen, liefst op basis van buff-id (spellid) als gebruiker die heeft ingevuld!
+    -- No buff active: try to find icons, preferring spell ID if the user entered one
     local icon
     if tryId then
         icon = GetSpellTexture(tryId)
@@ -186,7 +209,7 @@ function PH:_BuffActuallyActive(entry)
 end
 
 function PH:GetSpellbookIconByName(searchName)
-    -- Scan het spellbook voor een spell die precies searchName heet, return het texturePath
+    -- Scan the spellbook for a spell matching searchName and return its texture
     searchName = tostring(searchName)
     for tab = 1, GetNumSpellTabs() do
         local _, _, offset, numSpells = GetSpellTabInfo(tab)
@@ -262,7 +285,7 @@ function PH:ShowConfig()
     frame.listScroll:SetScrollChild(frame.listContent)
     frame.procRows = {}
 
-    -- + knop
+    -- + button
     frame.addBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.addBtn:SetSize(24, 24)
     frame.addBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 14)
@@ -271,7 +294,7 @@ function PH:ShowConfig()
         PH:AddProcEntry()
     end)
 
-    -- Sluitknop
+    -- Close button
     frame.closeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     frame.closeBtn:SetSize(70, 24)
     frame.closeBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 14)
@@ -364,7 +387,7 @@ function PH:UpdateProcIconsDisplay(activeProcs)
         anchor:ClearAllPoints()
         anchor:SetPoint(point, UIParent, relPoint, x, y)
     end
-    -- Toon anchor als geen procs of als "anker tonen" checkbox actief
+    -- Show anchor if no procs or if "show anchor" checkbox is active
     if not activeProcs or self.showAnchor then
         anchor.icon:SetAlpha(0.26)
         anchor.text:Show()
@@ -373,7 +396,7 @@ function PH:UpdateProcIconsDisplay(activeProcs)
         anchor:Hide()
     end
 
-    -- Altijd frames genoeg maken
+    -- Always ensure enough frames
     for i = 1, math.max(#activeProcs, #(self.procStackIcons or {})) do
         self:EnsureProcIconFrame(i)
     end
@@ -430,7 +453,7 @@ function PH:UpdateProcIconsDisplay(activeProcs)
                 f._fadeState = nil
             end)
         elseif isActive and wasActive then
-            -- Bestaande proc
+            -- Existing proc
             if f._fadeState == "shown" or not f._fadeState then
                 if f.icon:GetTexture() ~= cur.iconTex then
                     f.icon:SetTexture(cur.iconTex)
@@ -444,7 +467,7 @@ function PH:UpdateProcIconsDisplay(activeProcs)
                 f:SetAlpha(1)
             end
         else
-            -- Niet actief/niet meer nodig
+            -- Not active / no longer needed
             if f:IsShown() and (not f._fadeState or f._fadeState == "shown") then
                 f:Hide()
                 f._fadeState = nil
@@ -453,7 +476,7 @@ function PH:UpdateProcIconsDisplay(activeProcs)
 
         self._lastProcState[i] = isActive
     end
-    -- Overtollige iconen verbergen
+    -- Hide excess icons
     for i = (#activeProcs+1), #(self.procStackIcons or {}) do
         local f = self.procStackIcons[i]
         if f and f:IsShown() and (not f._fadeState or f._fadeState=="shown") then
@@ -469,7 +492,7 @@ function PH:Update()
     local procs = self:GetProcs()
     local activeProcs = {}
 
-    -- Zelfde als oude core: alle matches, horizontale rij
+    -- Same as old core: all matches, horizontal row
     for _, entry in ipairs(procs) do
         if entry and entry.buff and entry.buff ~= "" then
             local have, icon = self:_BuffActuallyActive(entry)

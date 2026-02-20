@@ -1,6 +1,20 @@
 EUI_Triggers = {}
 local T = EUI_Triggers
 
+local UnitExists = UnitExists
+local UnitHealth = UnitHealth
+local UnitHealthMax = UnitHealthMax
+local UnitBuff = UnitBuff
+local UnitDebuff = UnitDebuff
+local UnitThreatSituation = UnitThreatSituation
+local UnitIsFriend = UnitIsFriend
+local GetTotemInfo = GetTotemInfo
+local GetItemCount = GetItemCount
+local tonumber = tonumber
+local GetTime = GetTime
+
+local MAX_AURAS = 40
+
 local function UnitHPPercent(unit)
   if not UnitExists(unit) then return nil end
   local hp = UnitHealth(unit)
@@ -11,8 +25,7 @@ end
 
 local function HasAura(unit, auraName)
   if not auraName or auraName == "" then return false end
-  for i = 1, 40 do
-    local name = UnitBuff(unit, i)
+  for i = 1, MAX_AURAS do
     if not name then break end
     if name == auraName then
       return true
@@ -23,8 +36,7 @@ end
 
 local function HasDebuff(unit, auraName)
   if not auraName or auraName == "" then return false end
-  for i = 1, 40 do
-    local name = UnitDebuff(unit, i)
+  for i = 1, MAX_AURAS do
     if not name then break end
     if name == auraName then
       return true
@@ -96,20 +108,38 @@ T.EVAL.MISSING_DEBUFF_TARGET = function(rule)
   return not HasDebuff("target", aura)
 end
 
+local _evalCacheFrame = -1
+local _evalCache = {}
+
 function T.Evaluate(rule, context)
   if not rule or not rule.trigger then
     return false
   end
+
+  -- Per-frame result cache: avoid re-evaluating the same rule in the same frame
+  local frame = GetTime()
+  if frame ~= _evalCacheFrame then
+    _evalCacheFrame = frame
+    wipe(_evalCache)
+  end
+
+  local cacheKey = rule
+  local cached = _evalCache[cacheKey]
+  if cached ~= nil then return cached end
+
   local fn = T.EVAL[rule.trigger]
-  if not fn then return false end
+  if not fn then
+    _evalCache[cacheKey] = false
+    return false
+  end
 
   local ok = fn(rule, context)
 
-  -- NEW: generic invert for all triggers except NONE
   local inv = rule.params and rule.params.invert
   if inv and rule.trigger ~= "NONE" then
     ok = not ok
   end
 
+  _evalCache[cacheKey] = ok
   return ok
 end
