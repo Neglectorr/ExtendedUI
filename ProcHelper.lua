@@ -80,7 +80,8 @@ function PH:EnsureAnchorFrame()
     f:SetScript("OnDragStop", function()
         f:StopMovingOrSizing()
         f._isDragging = false
-        local db = ExtendedUI_DB.profile.global
+        local db = ExtendedUI_DB and ExtendedUI_DB.profile and ExtendedUI_DB.profile.global
+        if not db then return end
         local point, _, relPoint, x, y = f:GetPoint()
         db.procStackAnchor = { point=point or "CENTER", relPoint=relPoint or "CENTER", x=x or 0, y=y or 0 }
     end)

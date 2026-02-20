@@ -47,6 +47,7 @@ local function ScanBags()
 end
 
 local function EnsureRule(p, barId, slot, idx)
+  if not p or not p.bars or not p.bars[barId] or not p.bars[barId][slot] or not p.bars[barId][slot].rules then return nil end
   return p.bars[barId][slot].rules[idx]
 end
 
@@ -188,6 +189,7 @@ local function EnsureWindow()
   local function GetCurrentRule(ruleIndex)
     local p = ExtendedUI_DB.profile
     local barId, slot = C.state.barId, C.state.slot
+    if not p or not p.bars or not p.bars[barId] or not p.bars[barId][slot] or not p.bars[barId][slot].rules then return nil end
     return p.bars[barId][slot].rules[ruleIndex]
   end
 
@@ -521,7 +523,7 @@ local function EnsureWindow()
         local info = UIDropDownMenu_CreateInfo()
         for _, v in ipairs({ 2, 3 }) do
           info.text = tostring(v)
-          info.checked = (tonumber(rule.params.min) == v)
+          info.checked = (rule.params and tonumber(rule.params.min) == v)
           info.func = function()
             local r = GetCurrentRule(i)
             r.params.min = v

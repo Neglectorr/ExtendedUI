@@ -103,7 +103,7 @@ function T.Evaluate(rule, context)
   local fn = T.EVAL[rule.trigger]
   if not fn then return false end
 
-  local ok = fn(rule, context) and true or false
+  local ok = fn(rule, context)
 
   -- NEW: generic invert for all triggers except NONE
   local inv = rule.params and rule.params.invert

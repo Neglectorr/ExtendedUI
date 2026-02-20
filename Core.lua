@@ -171,6 +171,7 @@ function EUI:ApplySlot(barId, slot)
   if not SlotHasAnyActiveEffect(slotCfg) then
     self:ClearLane(btn, "A")
     self:ClearLane(btn, "B")
+    self:ClearLane(btn, "C")
     return
   end
   local now = GetTime()
@@ -286,7 +287,7 @@ btn:SetScript("OnEnter", function(self)
   GameTooltip:AddLine("LeftClick Show/Hide", .8, .8, .8)
   GameTooltip:Show()
 end)
-btn:SetScript("OnLeave", GameTooltip_Hide)
+btn:SetScript("OnLeave", function(self) GameTooltip:Hide() end)
 btn:SetScript("OnMouseUp", function(self, button)
   if button == "LeftButton" and EUI_Menu then
     EUI_Menu.ToggleHub()

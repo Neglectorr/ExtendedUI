@@ -9,40 +9,40 @@
 ## 🔴 Bugs
 
 ### Core.lua
-- [ ] **Version mismatch** – `ExtendedUI.toc` says `0.3.5`, `Core.lua` says `0.3.6`. Sync them.
-- [ ] **Lane C never cleared when no active effects** – `SlotHasAnyActiveEffect()` returns `false` → only lanes A and B are cleared (line 172-174). Lane C is skipped.
-- [ ] **`GameTooltip_Hide` passed as function reference** – `btn:SetScript("OnLeave", GameTooltip_Hide)` works only if `GameTooltip_Hide` accepts `self` as first arg; safer to wrap: `function(self) GameTooltip:Hide() end` (line 289).
+- [x] **Version mismatch** – `ExtendedUI.toc` says `0.3.5`, `Core.lua` says `0.3.6`. Sync them.
+- [x] **Lane C never cleared when no active effects** – `SlotHasAnyActiveEffect()` returns `false` → only lanes A and B are cleared (line 172-174). Lane C is skipped.
+- [x] **`GameTooltip_Hide` passed as function reference** – `btn:SetScript("OnLeave", GameTooltip_Hide)` works only if `GameTooltip_Hide` accepts `self` as first arg; safer to wrap: `function(self) GameTooltip:Hide() end` (line 289).
 
 ### Config.lua (ActionBarTweaks)
-- [ ] **`EnsureRule()` has no nil guards** – `p.bars[barId][slot].rules[idx]` will error if any intermediate key is nil (line 49-51). Add defensive checks or ensure callers always pre-validate.
-- [ ] **`tonumber(rule.params.min)` may be nil** – Comparing `nil == 2` silently fails; guard with `if rule.params and rule.params.min then` before comparisons (e.g. line 524 area).
+- [x] **`EnsureRule()` has no nil guards** – `p.bars[barId][slot].rules[idx]` will error if any intermediate key is nil (line 49-51). Add defensive checks or ensure callers always pre-validate.
+- [x] **`tonumber(rule.params.min)` may be nil** – Comparing `nil == 2` silently fails; guard with `if rule.params and rule.params.min then` before comparisons (e.g. line 524 area).
 
 ### Effects.lua
-- [ ] **Missing nil check on overlay** – `GetOverlay()` returns `btn.ExtendedUIOverlay` without checking if `btn` is nil (line 4). Several `FX.APPLY.*` functions assume the overlay exists without early-return guards.
-- [ ] **Potential divide-by-zero in sparkle effect** – `math.floor(ctx.now * speed) % n` where `n` could be 0 if no sparkle textures were created (line 106).
+- [x] **Missing nil check on overlay** – Already guarded: `GetOverlay()` uses `btn and btn.ExtendedUIOverlay` and all `FX.APPLY.*` functions check `if not o` before use. No change needed.
+- [x] **Potential divide-by-zero in sparkle effect** – Already guarded: `AUTOCAST_SPARKLES` checks `if n == 0 then return end` before `% n`. No change needed.
 
 ### OneBag.lua
-- [ ] **`GetContainerItemInfo()` return-value branch mismatch** – The old-API branch (line 72-77) unpacks 7 return values, reassigns to 4, and handles a `type(a) == "table"` case. In TBC 2.5.5, `GetContainerItemInfo` returns individual values (not a table). The table branch may be dead code or may mask a real problem if `C_Container` is unavailable.
-- [ ] **Default DB not persisted** – `ExtendedUI_DB or { profile = { ... } }` on line 30 creates a throwaway table that is never saved back to `ExtendedUI_DB`.
+- [x] **`GetContainerItemInfo()` return-value branch mismatch** – Removed dead `type(a) == "table"` branch; TBC 2.5.5 always returns individual values.
+- [x] **Default DB not persisted** – `EnsureDB()` now initializes nested tables step-by-step (`ExtendedUI_DB or {}`, `profile or {}`, `global or {}`) instead of creating a throwaway compound table.
 
 ### LootToast.lua
-- [ ] **`GetItemInfo()` race condition** – `GetItemInfo(itemLink)` can return nil if the item is not yet in the client cache (line 199). Should retry on `GET_ITEM_INFO_RECEIVED` or guard against nil.
-- [ ] **`ITEM_QUALITY_COLORS[quality]` unguarded** – If `quality` is nil or out of range, this will error (line 15).
+- [x] **`GetItemInfo()` race condition** – Already handled: code checks `if not name then` and retries with `C_Timer.After(0.15, ...)`. No change needed.
+- [x] **`ITEM_QUALITY_COLORS[quality]` unguarded** – Already handled: code checks `if not quality then return 1,1,1 end` and uses `ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]`. No change needed.
 
 ### TotemTracker.lua
-- [ ] **`wasVisible` race condition** – `wasVisible` is set to `nil` during animation but checked every update tick (0.15 s). If the update fires mid-animation this can cause incorrect state (line 226).
-- [ ] **Hardcoded mode count** – `(self.mode + 1) % 3` assumes exactly 3 modes; adding a mode later will break this (line 308).
+- [x] **`wasVisible` race condition** – Added `isFading` check: if a new totem appears while the old fade animation is playing, the animation is stopped and state is reset before re-appearing.
+- [x] **Hardcoded mode count** – `(self.mode + 1) % 3` → `(self.mode + 1) % #self.modes`.
 
 ### TotemRangeUtil.lua
-- [ ] **Default `true` when position unknown** – `IsPlayerInRange()` returns `true` (in range) when no position data exists (line 44). This could hide out-of-range scenarios. Consider returning `nil` or `false` with a flag.
+- [x] **Default `true` when position unknown** – `IsPlayerInRange()` now returns `nil` when no position data exists. Callers (`ShouldFadeTotem`) handle `nil` as "assume in range".
 
 ### ProcHelper.lua
-- [ ] **Icon spacing jump** – Icons are placed at `8+72` (= 80 px) during animation but final position uses 8 px offset (line 397). This causes a visible snap when the animation ends.
-- [ ] **No nil check on `db.procStackAnchor`** – Accessing `.point` on a nil table will error if the saved-variable entry is missing (line 82).
+- [ ] **Icon spacing jump** – Icons are placed at `8+72` (= 80 px) during animation but final position uses 8 px offset (line 397). This causes a visible snap when the animation ends. *(Animation math is consistent; any snap is a single-frame artifact of WoW's animation system. Requires in-game visual testing to confirm.)*
+- [x] **No nil check on `db.procStackAnchor`** – Added nil guard for `ExtendedUI_DB.profile.global` in `OnDragStop` handler.
 
 ### SoundTweaks.lua
-- [ ] **Type mismatch on error IDs** – `LoadDynamicErrorLabels` stores keys as `tonumber(id)` (line 130), but `buildErrorMenuList` later iterates with `idstr` as a string (line 156). Mixing number and string keys in lookups can cause misses.
-- [ ] **Dead code** – `menuEmotes` is assigned twice (lines 361 and 514); the first assignment is overwritten and never used.
+- [x] **Type mismatch on error IDs** – `LoadDynamicErrorLabels` now uses `tostring(id)` for consistent string keys matching `SaveDynamicErrorLabel`.
+- [x] **Dead code** – Removed unused first `menuEmotes` assignment (line 361); only the one inside `UpdateMenu()` is used.
 
 ### SoundBank_*.lua (DB2-verified)
 - [ ] **126 invalid/unverifiable FileDataIDs** – Cross-referenced 2,758 sound IDs against the `SoundKitEntry` DB2 table from [wago.tools](https://wago.tools/db2). 95.4% (2,632) are valid. 126 IDs were not found in `SoundKitEntry` or `ManifestInterfaceData` and may be broken or removed. Worst offenders:
@@ -54,7 +54,7 @@
   - Full list in [`DB/verification_results.md`](DB/verification_results.md). Test in-game with `/run PlaySoundFile(ID)` and remove any that produce no audio.
 
 ### Triggers.lua
-- [ ] **Redundant `and true or false`** – `ok = fn(rule, context) and true or false` (line 106) is unnecessary since the trigger functions already return booleans.
+- [x] **Redundant `and true or false`** – `ok = fn(rule, context) and true or false` (line 106) is unnecessary since the trigger functions already return booleans.
 
 ---
 

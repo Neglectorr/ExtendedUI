@@ -127,7 +127,7 @@ local function LoadDynamicErrorLabels()
   EnsureDB()
   wipe(ST._dynamicErrorLabels)
   for id, label in pairs(ExtendedUI_DB.profile.global.dynamicErrorLabels) do
-    ST._dynamicErrorLabels[tonumber(id)] = label
+    ST._dynamicErrorLabels[tostring(id)] = label
   end
 end
 
@@ -357,8 +357,6 @@ function ST:EnsureConfigMenu()
   emoteScroll:SetScrollChild(emoteContent)
   w.emoteContent = emoteContent
   w.emoteRows = {}
-
-  local menuEmotes = ExtendedUI_DB.profile.global.allEmotes or ST.AllEmotes
 
   local function EnsureErrRow(i)
     if w.errRows[i] then return w.errRows[i] end

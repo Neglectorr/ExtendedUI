@@ -19,8 +19,9 @@ local ICON_INSET = 2
 -- ==================
 
 local function EnsureDB()
-  ExtendedUI_DB = ExtendedUI_DB or { profile={ global = { oneBagEnabled = true } } }
-  if not ExtendedUI_DB.profile.global then ExtendedUI_DB.profile.global = { oneBagEnabled = true } end
+  ExtendedUI_DB = ExtendedUI_DB or {}
+  ExtendedUI_DB.profile = ExtendedUI_DB.profile or {}
+  ExtendedUI_DB.profile.global = ExtendedUI_DB.profile.global or {}
   local g = ExtendedUI_DB.profile.global
   if g.oneBagEnabled == nil then g.oneBagEnabled = true end
   g.oneBagFrame = g.oneBagFrame or { point = "CENTER", relPoint = "CENTER", x = 0, y = 0 }
@@ -70,11 +71,8 @@ local function GetContainerInfo(bag, slot)
     return info.iconFileID, info.stackCount, info.hyperlink, info.quality
   end
   if GetContainerItemInfo then
-    local a, b2, _, quality, _, _, link2 = GetContainerItemInfo(bag, slot)
-    if type(a) == "table" then
-      return a.iconFileID or a.icon, a.stackCount or a.count, a.hyperlink, a.quality
-    end
-    return a, b2, link2, quality
+    local icon, count, _, quality, _, _, link2 = GetContainerItemInfo(bag, slot)
+    return icon, count, link2, quality
   end
   return nil, nil, nil, nil
 end

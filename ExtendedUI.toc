@@ -2,7 +2,7 @@
 ## Title: ExtendedUI
 ## Notes: Per actionbar slot configurable visual effects driven by triggers.
 ## Author: WesleyPostma
-## Version: 0.3.5
+## Version: 0.3.6
 ## SavedVariablesPerCharacter: ExtendedUI_DB
 
 Core.lua

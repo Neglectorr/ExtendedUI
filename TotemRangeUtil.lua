@@ -41,7 +41,7 @@ function TotemRangeUtil:IsPlayerInRange(slot)
         local dist = math.sqrt(dx*dx + dy*dy)
         return dist <= self.range
     end
-    return true -- geen positie bekend; altijd in range
+    return nil -- no position known; status unknown
 end
 
 -- Event handler: Alleen hier de positie EN de totem-coord opslaan

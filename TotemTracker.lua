@@ -47,7 +47,9 @@ end
 
 local function ShouldFadeTotem(slot)
   if not TotemRangeUtil then return false end
-  if not TotemRangeUtil:IsPlayerInRange(slot) then
+  local inRange = TotemRangeUtil:IsPlayerInRange(slot)
+  if inRange == nil then return false end -- position unknown, assume in range
+  if not inRange then
     return true
   end
   if IsInDungeon() and not PlayerHasTotemBuff(slot) then
@@ -259,6 +261,14 @@ function TOTEM3D:UpdateTotems()
       if haveTotem and duration and duration > 0 and totemName and totemName ~= "" then
         btn = FindSnapButtonForTotem(totemName)
         if btn then
+          -- If a new totem appears while the old fade animation is still playing,
+          -- stop the fade and reset art.wasShown so the appear animation replays
+          if art.isFading then
+            art.animGroup:Stop()
+            art.isFading = nil
+            art.wasShown = nil
+            art:SetAlpha(1)
+          end
           local artSet = artPaths[slot]
           local texW, texH = 161, 271
           local tgtW, tgtH = 56, 100
@@ -305,7 +315,7 @@ function TOTEM3D:UpdateTotems()
 end
 
 function TOTEM3D:NextMode()
-  self.mode = (self.mode + 1) % 3
+  self.mode = (self.mode + 1) % #self.modes
   if ExtendedUI_DB and ExtendedUI_DB.profile and ExtendedUI_DB.profile.global then
     ExtendedUI_DB.profile.global.totem3DMode = self.mode
   end
