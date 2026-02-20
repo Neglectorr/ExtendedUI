@@ -1,0 +1,106 @@
+# ExtendedUI – Optimization & Bug-Fix TODO
+
+> WoW TBC Classic 2.5.5 (Interface 20505) · Addon version 0.3.5 / 0.3.6
+
+---
+
+## 🔴 Bugs
+
+### Core.lua
+- [ ] **Version mismatch** – `ExtendedUI.toc` says `0.3.5`, `Core.lua` says `0.3.6`. Sync them.
+- [ ] **Lane C never cleared when no active effects** – `SlotHasAnyActiveEffect()` returns `false` → only lanes A and B are cleared (line 172-174). Lane C is skipped.
+- [ ] **`GameTooltip_Hide` passed as function reference** – `btn:SetScript("OnLeave", GameTooltip_Hide)` works only if `GameTooltip_Hide` accepts `self` as first arg; safer to wrap: `function(self) GameTooltip:Hide() end` (line 289).
+
+### Config.lua (ActionBarTweaks)
+- [ ] **`EnsureRule()` has no nil guards** – `p.bars[barId][slot].rules[idx]` will error if any intermediate key is nil (line 49-51). Add defensive checks or ensure callers always pre-validate.
+- [ ] **`tonumber(rule.params.min)` may be nil** – Comparing `nil == 2` silently fails; guard with `if rule.params and rule.params.min then` before comparisons (e.g. line 524 area).
+
+### Effects.lua
+- [ ] **Missing nil check on overlay** – `GetOverlay()` returns `btn.ExtendedUIOverlay` without checking if `btn` is nil (line 4). Several `FX.APPLY.*` functions assume the overlay exists without early-return guards.
+- [ ] **Potential divide-by-zero in sparkle effect** – `math.floor(ctx.now * speed) % n` where `n` could be 0 if no sparkle textures were created (line 106).
+
+### OneBag.lua
+- [ ] **`GetContainerItemInfo()` return-value branch mismatch** – The old-API branch (line 72-77) unpacks 7 return values, reassigns to 4, and handles a `type(a) == "table"` case. In TBC 2.5.5, `GetContainerItemInfo` returns individual values (not a table). The table branch may be dead code or may mask a real problem if `C_Container` is unavailable.
+- [ ] **Default DB not persisted** – `ExtendedUI_DB or { profile = { ... } }` on line 30 creates a throwaway table that is never saved back to `ExtendedUI_DB`.
+
+### LootToast.lua
+- [ ] **`GetItemInfo()` race condition** – `GetItemInfo(itemLink)` can return nil if the item is not yet in the client cache (line 199). Should retry on `GET_ITEM_INFO_RECEIVED` or guard against nil.
+- [ ] **`ITEM_QUALITY_COLORS[quality]` unguarded** – If `quality` is nil or out of range, this will error (line 15).
+
+### TotemTracker.lua
+- [ ] **`wasVisible` race condition** – `wasVisible` is set to `nil` during animation but checked every update tick (0.15 s). If the update fires mid-animation this can cause incorrect state (line 226).
+- [ ] **Hardcoded mode count** – `(self.mode + 1) % 3` assumes exactly 3 modes; adding a mode later will break this (line 308).
+
+### TotemRangeUtil.lua
+- [ ] **Default `true` when position unknown** – `IsPlayerInRange()` returns `true` (in range) when no position data exists (line 44). This could hide out-of-range scenarios. Consider returning `nil` or `false` with a flag.
+
+### ProcHelper.lua
+- [ ] **Icon spacing jump** – Icons are placed at `8+72` (= 80 px) during animation but final position uses 8 px offset (line 397). This causes a visible snap when the animation ends.
+- [ ] **No nil check on `db.procStackAnchor`** – Accessing `.point` on a nil table will error if the saved-variable entry is missing (line 82).
+
+### SoundTweaks.lua
+- [ ] **Type mismatch on error IDs** – `LoadDynamicErrorLabels` stores keys as `tonumber(id)` (line 130), but `buildErrorMenuList` later iterates with `idstr` as a string (line 156). Mixing number and string keys in lookups can cause misses.
+- [ ] **Dead code** – `menuEmotes` is assigned twice (lines 361 and 514); the first assignment is overwritten and never used.
+
+### Triggers.lua
+- [ ] **Redundant `and true or false`** – `ok = fn(rule, context) and true or false` (line 106) is unnecessary since the trigger functions already return booleans.
+
+---
+
+## 🟡 Optimizations
+
+### Core.lua
+- [ ] **Cache `ExtendedUI_DB.profile` in OnUpdate** – The deep path `ExtendedUI_DB.profile.global.updateInterval` is traversed every frame (line 224). Cache in a local after `PLAYER_ENTERING_WORLD`.
+- [ ] **Avoid redundant clearing** – When disabled, three separate `ClearLane` calls (lines 162-165) could use a loop over `EUI.LANE`.
+
+### Config.lua
+- [ ] **Cache bag scans** – `ScanBags()` rescans all 5 bags on every call. Cache results and only refresh on `BAG_UPDATE` events.
+- [ ] **Refactor `Refresh()` function** – At 200+ lines, `Refresh()` is hard to maintain. Break into helpers per rule-block (trigger params, effect params, item dropdown, etc.).
+- [ ] **Avoid recreating dropdowns on every Refresh** – `UIDropDownMenu_Initialize` is called inside `Refresh()` each time the config panel is shown. Initialize once and update values.
+
+### Effects.lua
+- [ ] **Create overlay textures once** – Overlays should be created once per button and reused, not checked/recreated in hot paths.
+- [ ] **Pre-compute sparkle layouts** – Sparkle positions are recalculated every frame. Compute once on creation and cache.
+
+### OneBag.lua
+- [ ] **Pool item buttons** – Creating/destroying buttons on every layout pass is wasteful. Use an object pool.
+- [ ] **Debounce `Layout()` and `Update()` calls** – Multiple bag events can fire in rapid succession; debounce with a short `C_Timer.After`.
+- [ ] **Deduplicate bag API abstraction** – The `C_Container` vs legacy fallback chain is duplicated across `GetLink`, `GetContainerInfo`, and `GetNumSlots`. Extract a single compatibility shim.
+
+### BuffTracker.lua
+- [ ] **Cache `EUI.DB.profile` reference** – Deeply nested property access every tick (line 486). Store in a local.
+- [ ] **Use table pool for buff entries** – Allocating new tables per buff per update adds GC pressure.
+
+### Triggers.lua
+- [ ] **Buff/debuff loop limit** – Hardcoded to 40 (lines 14, 26). TBC supports up to 40 buffs, so this is currently correct but should use a constant for clarity.
+- [ ] **Result caching per frame** – If `Evaluate()` is called multiple times for the same rule in one frame, cache the result.
+
+### TotemTracker.lua
+- [ ] **Cache `FindSnapButtonForTotem()` results** – Called every 0.15 s but the target button doesn't change until the totem is replaced. Cache and invalidate on `PLAYER_TOTEM_UPDATE`.
+- [ ] **Throttle ticker when no totems active** – The 0.15 s ticker runs continuously even with zero totems. Pause when `GetTotemInfo` returns nothing for all 4 slots.
+
+### ProcHelper.lua
+- [ ] **Cache `GetSpellInfo()` results** – Called repeatedly for the same spell IDs (lines 106, 144). Store in a lookup table.
+
+### SoundTweaks.lua
+- [ ] **Consolidate duplicate `OnTextChanged` handlers** – Lines 484-491 and 522-528 have near-identical logic. Extract a shared function.
+- [ ] **Cache discovered errors** – `buildErrorMenuList()` rebuilds the list every time the menu updates. Cache and dirty-flag on new discoveries only.
+
+### Menu.lua
+- [ ] **Throttle totem art OnUpdate** – `OnUpdate` runs every frame to check `TOTEM3D.mode` (line 149). Use elapsed-time gating.
+- [ ] **Loop button creation** – Four similar `MakeButton` calls (lines 80-91) could use a data-driven loop.
+
+### General
+- [ ] **Use `local` for repeated globals** – Functions like `GetTime()`, `UnitHealth()`, `math.floor()`, `math.cos()`, `math.sin()` should be cached as locals at file scope for performance in hot paths.
+- [ ] **Consistent localization** – Tooltip text and print statements mix Dutch and English (e.g. `"Hoofdmenu"` in Core.lua line 285, Dutch comments like `"Pas eventueel"` and `"Bereken"` in TotemRangeUtil). Pick one language and use a localization table.
+
+---
+
+## 🔵 Code Quality / Maintainability
+
+- [ ] **Add `## Version` sync check** – Ensure `.toc` and `Core.lua` version strings stay in sync (manual or automated).
+- [ ] **Standardize nil-guard pattern** – Some files use `if X and X.Y and X.Y.Z`, others access deep paths directly. Adopt a consistent defensive style or write a helper (`safenav(tbl, "a.b.c")`).
+- [ ] **Remove debug `print()` calls** – `Core.lua` line 3: `print("Core Loaded")` should be gated behind a debug flag or removed for release.
+- [ ] **Document public API per module** – Each `EUI_*` global (e.g. `EUI_Triggers`, `EUI_Effects`, `EUI_Config`, `EUI_Menu`) should have a brief header comment listing its public functions.
+- [ ] **Consolidate flyout modules** – `DynamicDemonFlyout.lua`, `DynamicMageFlyout.lua`, and `DynamicTotemFlyout.lua` share ~70 % of their logic (arrow creation, flyout layout, secure action binding). Extract a shared `DynamicFlyoutBase` module.
+- [ ] **TotemTracker rank stripping** – `StripTotemRank()` only handles English `" (Rank X)"` patterns. Will break for localized clients (French: `"Rang"`, German: `"Rang"`).
