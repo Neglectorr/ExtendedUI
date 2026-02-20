@@ -1,13 +1,20 @@
 EUI_Effects = {}
 local FX = EUI_Effects
 
+local math_sin = math.sin
+local math_cos = math.cos
+local math_floor = math.floor
+local math_min = math.min
+local math_pi = math.pi
+local unpack = unpack
+
 local function GetOverlay(btn)
   return btn and btn.ExtendedUIOverlay
 end
 
 local function Pulse(now, speed)
   speed = tonumber(speed) or 1.0
-  return 0.5 + 0.5 * math.sin(now * (math.pi * 2) * speed)
+  return 0.5 + 0.5 * math_sin(now * (math_pi * 2) * speed)
 end
 
 local function GetColor(rule)
@@ -81,8 +88,8 @@ FX.APPLY.AUTOCAST_SPARKLES = function(rule, ctx)
   local h = o:GetHeight() or 0
   if w <= 0 or h <= 0 then return end
 
-  local radius = (math.min(w, h) / 2) - 4
-  local step = (2 * math.pi) / n
+  local radius = (math_min(w, h) / 2) - 4
+  local step = (2 * math_pi) / n
 
   if (not o._sparkLayout) or o._sparkW ~= w or o._sparkH ~= h then
     o._sparkLayout = true
@@ -95,15 +102,15 @@ FX.APPLY.AUTOCAST_SPARKLES = function(rule, ctx)
       t:SetSize(baseSize, baseSize)
 
       local a = (i - 1) * step
-      local x = math.cos(a) * radius
-      local y = math.sin(a) * radius
+      local x = math_cos(a) * radius
+      local y = math_sin(a) * radius
       t:ClearAllPoints()
       t:SetPoint("CENTER", o, "CENTER", x, y)
     end
   end
 
   local speed = 6.0
-  local headIndex = (math.floor(ctx.now * speed) % n) + 1
+  local headIndex = (math_floor(ctx.now * speed) % n) + 1
 
   local K = 4
   local aMax = 0.85
